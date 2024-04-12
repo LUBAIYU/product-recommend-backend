@@ -6,6 +6,10 @@ package com.lzh.recommend.constant;
  * @author by
  */
 public interface UserConsts {
+    /**
+     * 用户登录态
+     */
+    String USER_LOGIN_STATE = "user_login_state";
     Integer USER_NAME_LENGTH = 4;
     Integer USER_PASSWORD_LENGTH = 8;
     String USER_NAME_ERROR = "用户名长度不能小于4位！";

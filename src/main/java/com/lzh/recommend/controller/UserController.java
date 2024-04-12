@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import javax.annotation.Resource;
+import javax.servlet.http.HttpServletRequest;
 
 /**
  * @author by
@@ -25,11 +26,11 @@ public class UserController {
     private UserService userService;
 
     @PostMapping("/login")
-    public Result<UserVo> login(@RequestBody LoginDto loginDto) {
+    public Result<UserVo> login(@RequestBody LoginDto loginDto, HttpServletRequest request) {
         if (loginDto == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
-        UserVo userVo = userService.login(loginDto);
+        UserVo userVo = userService.login(loginDto, request);
         return Result.success(userVo);
     }
 

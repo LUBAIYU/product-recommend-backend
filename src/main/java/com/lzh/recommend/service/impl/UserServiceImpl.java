@@ -7,6 +7,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.lzh.recommend.constant.UserConsts;
 import com.lzh.recommend.enums.ErrorCode;
+import com.lzh.recommend.enums.RoleEnum;
 import com.lzh.recommend.exception.BusinessException;
 import com.lzh.recommend.mapper.UserMapper;
 import com.lzh.recommend.model.dto.LoginDto;
@@ -17,6 +18,8 @@ import com.lzh.recommend.service.UserService;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 
+import javax.servlet.http.HttpServletRequest;
+
 /**
  * @author by
  */
@@ -25,7 +28,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         implements UserService {
 
     @Override
-    public UserVo login(LoginDto loginDto) {
+    public UserVo login(LoginDto loginDto, HttpServletRequest request) {
         //获取请求参数
         String userName = loginDto.getUserName();
         String userPassword = loginDto.getUserPassword();
@@ -55,6 +58,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         //用户信息脱敏
         UserVo userVo = new UserVo();
         BeanUtil.copyProperties(user, userVo);
+        //设置用户登录态
+        request.getSession().setAttribute(UserConsts.USER_LOGIN_STATE, userVo);
         //返回
         return userVo;
     }
@@ -95,6 +100,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         user = new User();
         user.setUserName(userName);
         user.setUserPassword(encryptPassword);
+        user.setRole(RoleEnum.USER.getCode());
         user.setSalt(salt);
         this.save(user);
     }

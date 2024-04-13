@@ -104,6 +104,19 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         user.setSalt(salt);
         this.save(user);
     }
+
+    @Override
+    public UserVo getLoginUser(HttpServletRequest request) {
+        //获取用户登录态
+        Object object = request.getSession().getAttribute(UserConsts.USER_LOGIN_STATE);
+        UserVo userVo = (UserVo) object;
+        //判断是否为空
+        if (userVo == null) {
+            throw new BusinessException(ErrorCode.NOT_LOGIN_ERROR);
+        }
+        //返回结果
+        return userVo;
+    }
 }
 
 

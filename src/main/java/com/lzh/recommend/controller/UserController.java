@@ -7,6 +7,7 @@ import com.lzh.recommend.model.dto.RegisterDto;
 import com.lzh.recommend.model.vo.UserVo;
 import com.lzh.recommend.service.UserService;
 import com.lzh.recommend.utils.Result;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -41,5 +42,14 @@ public class UserController {
         }
         userService.register(registerDto);
         return Result.success();
+    }
+
+    @GetMapping("/get/loginUser")
+    public Result<UserVo> getLoginUser(HttpServletRequest request) {
+        if (request == null) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
+        UserVo userVo = userService.getLoginUser(request);
+        return Result.success(userVo);
     }
 }

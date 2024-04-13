@@ -1,9 +1,9 @@
 package com.lzh.recommend.service;
 
+import com.baomidou.mybatisplus.extension.service.IService;
 import com.lzh.recommend.model.dto.LoginDto;
 import com.lzh.recommend.model.dto.RegisterDto;
 import com.lzh.recommend.model.entity.User;
-import com.baomidou.mybatisplus.extension.service.IService;
 import com.lzh.recommend.model.vo.UserVo;
 
 import javax.servlet.http.HttpServletRequest;
@@ -28,4 +28,11 @@ public interface UserService extends IService<User> {
      * @param registerDto 注册请求体
      */
     void register(RegisterDto registerDto);
+
+    /**
+     * 获取当前登录的用户信息
+     *
+     * @param request 请求
+     */
+    UserVo getLoginUser(HttpServletRequest request);
 }

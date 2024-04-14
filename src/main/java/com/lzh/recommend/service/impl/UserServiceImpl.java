@@ -2,9 +2,11 @@ package com.lzh.recommend.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.util.RandomUtil;
+import cn.hutool.core.util.StrUtil;
 import cn.hutool.crypto.digest.DigestUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.lzh.recommend.constant.CommonConsts;
 import com.lzh.recommend.constant.UserConsts;
 import com.lzh.recommend.enums.ErrorCode;
 import com.lzh.recommend.enums.RoleEnum;
@@ -16,9 +18,17 @@ import com.lzh.recommend.model.entity.User;
 import com.lzh.recommend.model.vo.UserVo;
 import com.lzh.recommend.service.UserService;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
 import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.util.UUID;
 
 /**
  * @author by
@@ -26,6 +36,11 @@ import javax.servlet.http.HttpServletRequest;
 @Service
 public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         implements UserService {
+
+    @Value("${product.recommend.path.domain}")
+    private String domain;
+    @Value("${product.recommend.path.address}")
+    private String address;
 
     @Override
     public UserVo login(LoginDto loginDto, HttpServletRequest request) {
@@ -116,6 +131,59 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         }
         //返回结果
         return userVo;
+    }
+
+    @Override
+    public String uploadImage(MultipartFile multipartFile) {
+        //判断图片名称是否为空
+        String originalFilename = multipartFile.getOriginalFilename();
+        if (StrUtil.isBlank(originalFilename)) {
+            throw new BusinessException(40000, CommonConsts.IMAGE_UPLOAD_ERROR);
+        }
+        //判断图片后缀是否存在
+        String suffix = originalFilename.substring(originalFilename.lastIndexOf("."));
+        if (StrUtil.isBlank(suffix)) {
+            throw new BusinessException(40000, CommonConsts.IMAGE_FORMAT_ERROR);
+        }
+        //生成随机文件名
+        String newFileName = UUID.randomUUID().toString().replace("-", "") + suffix;
+        //上传图片
+        File dest = new File(address + "/" + newFileName);
+        try {
+            multipartFile.transferTo(dest);
+        } catch (Exception e) {
+            log.error("图片上传失败，{}", e);
+            throw new BusinessException(40000, CommonConsts.IMAGE_UPLOAD_ERROR);
+        }
+        //获取并返回图片请求路径
+        return domain + "/user/get/avatar/" + newFileName;
+    }
+
+    @Override
+    public void getUserAvatar(String fileName, HttpServletResponse response) {
+        //获取文件后缀
+        String suffix = fileName.substring(fileName.lastIndexOf(".") + 1);
+        //获取图片存放路径
+        String url = address + "/" + fileName;
+        //响应图片
+        response.setContentType("image/" + suffix);
+        //从服务器中读取图片
+        try (
+                //获取输出流
+                OutputStream outputStream = response.getOutputStream();
+                //获取输入流
+                FileInputStream fileInputStream = new FileInputStream(url)
+        ) {
+            byte[] buffer = new byte[1024];
+            int b;
+            while ((b = fileInputStream.read(buffer)) != -1) {
+                //将图片以字节流形式写入输出流
+                outputStream.write(buffer, 0, b);
+            }
+        } catch (IOException e) {
+            log.error("文件读取失败，{}", e);
+            throw new BusinessException(40000, CommonConsts.IMAGE_READ_ERROR);
+        }
     }
 }
 

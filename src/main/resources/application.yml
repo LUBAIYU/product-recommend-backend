@@ -23,3 +23,10 @@ mybatis-plus:
   # 配置mybatis-plus的日志
   configuration:
     log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+
+# 自定义图片上传路径
+product:
+  recommend:
+    path:
+      domain: http://localhost:8080
+      address: D:\idea\project\product-recommend\src\main\resources\images

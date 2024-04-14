@@ -5,6 +5,7 @@ import cn.hutool.core.util.RandomUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.crypto.digest.DigestUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.lzh.recommend.constant.CommonConsts;
 import com.lzh.recommend.constant.UserConsts;
@@ -14,6 +15,7 @@ import com.lzh.recommend.exception.BusinessException;
 import com.lzh.recommend.mapper.UserMapper;
 import com.lzh.recommend.model.dto.LoginDto;
 import com.lzh.recommend.model.dto.RegisterDto;
+import com.lzh.recommend.model.dto.UserUpdateDto;
 import com.lzh.recommend.model.entity.User;
 import com.lzh.recommend.model.vo.UserVo;
 import com.lzh.recommend.service.UserService;
@@ -184,6 +186,51 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
             log.error("文件读取失败，{}", e);
             throw new BusinessException(40000, CommonConsts.IMAGE_READ_ERROR);
         }
+    }
+
+    @Override
+    public void updateInfo(UserUpdateDto userUpdateDto) {
+        //获取请求参数
+        Long id = userUpdateDto.getId();
+        String userName = userUpdateDto.getUserName();
+        String userAvatar = userUpdateDto.getUserAvatar();
+        Integer gender = userUpdateDto.getGender();
+        Integer age = userUpdateDto.getAge();
+        String phone = userUpdateDto.getPhone();
+        String address = userUpdateDto.getAddress();
+        //创建更新条件
+        LambdaUpdateWrapper<User> wrapper = new LambdaUpdateWrapper<>();
+        //校验部分参数
+        if (id == null || id <= 0) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
+        wrapper.eq(User::getId, id);
+        wrapper.set(StrUtil.isNotBlank(userName), User::getUserName, userName);
+        wrapper.set(StrUtil.isNotBlank(userAvatar), User::getUserAvatar, userAvatar);
+        wrapper.set(StrUtil.isNotBlank(address), User::getAddress, address);
+        if (gender != null) {
+            //如果用户想要修改性别，只能输入0或1
+            if (gender < 0 || gender > 1) {
+                throw new BusinessException(40000, UserConsts.GENDER_PARAM_ERROR);
+            }
+            wrapper.set(User::getGender, gender);
+        }
+        if (age != null) {
+            //如果用户想要修改年龄，只能输入0到100
+            if (age < UserConsts.AGE_MIN || age > UserConsts.AGE_MAX) {
+                throw new BusinessException(40000, UserConsts.AGE_PARAM_ERROR);
+            }
+            wrapper.set(User::getAge, age);
+        }
+        if (phone != null) {
+            //如果用户想要修改电话号码，只能输入11位的字符串
+            if (phone.length() != UserConsts.PHONE_REQUIRED_LENGTH) {
+                throw new BusinessException(40000, UserConsts.PHONE_PARAM_ERROR);
+            }
+            wrapper.set(User::getPhone, phone);
+        }
+        //执行更新操作
+        this.update(wrapper);
     }
 }
 

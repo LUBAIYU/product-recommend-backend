@@ -3,6 +3,7 @@ package com.lzh.recommend.service;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.lzh.recommend.model.dto.LoginDto;
 import com.lzh.recommend.model.dto.RegisterDto;
+import com.lzh.recommend.model.dto.UserUpdateDto;
 import com.lzh.recommend.model.entity.User;
 import com.lzh.recommend.model.vo.UserVo;
 import org.springframework.web.multipart.MultipartFile;
@@ -35,7 +36,7 @@ public interface UserService extends IService<User> {
      * 获取当前登录的用户信息
      *
      * @param request 请求
-     * @return
+     * @return 返回脱敏后的用户信息
      */
     UserVo getLoginUser(HttpServletRequest request);
 
@@ -54,4 +55,11 @@ public interface UserService extends IService<User> {
      * @param response 响应对象
      */
     void getUserAvatar(String fileName, HttpServletResponse response);
+
+    /**
+     * 修改用户信息
+     *
+     * @param userUpdateDto 用户信息修改对象
+     */
+    void updateInfo(UserUpdateDto userUpdateDto);
 }

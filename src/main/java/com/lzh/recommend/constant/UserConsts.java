@@ -17,4 +17,10 @@ public interface UserConsts {
     String USER_PARAMS_ERROR = "用户名或密码错误！";
     String PASSWORD_NOT_EQUAL = "密码不一致！";
     String USER_NAME_EXIST = "用户名已经存在！";
+    String GENDER_PARAM_ERROR = "性别参数异常！";
+    String AGE_PARAM_ERROR = "年龄参数异常！";
+    Integer AGE_MIN = 0;
+    Integer AGE_MAX = 100;
+    Integer PHONE_REQUIRED_LENGTH = 11;
+    String PHONE_PARAM_ERROR = "电话号码参数异常！";
 }

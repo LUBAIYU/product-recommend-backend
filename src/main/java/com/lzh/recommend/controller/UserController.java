@@ -1,10 +1,13 @@
 package com.lzh.recommend.controller;
 
 import cn.hutool.core.util.StrUtil;
+import com.lzh.recommend.annotation.LoginCheck;
+import com.lzh.recommend.constant.UserConsts;
 import com.lzh.recommend.enums.ErrorCode;
 import com.lzh.recommend.exception.BusinessException;
 import com.lzh.recommend.model.dto.LoginDto;
 import com.lzh.recommend.model.dto.RegisterDto;
+import com.lzh.recommend.model.dto.UserUpdateDto;
 import com.lzh.recommend.model.vo.UserVo;
 import com.lzh.recommend.service.UserService;
 import com.lzh.recommend.utils.Result;
@@ -72,5 +75,25 @@ public class UserController {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
         userService.getUserAvatar(fileName, response);
+    }
+
+    @PostMapping("/logout")
+    @LoginCheck
+    public Result<Void> logout(HttpServletRequest request) {
+        if (request == null) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
+        //移除登录态
+        request.getSession().setAttribute(UserConsts.USER_LOGIN_STATE, null);
+        return Result.success();
+    }
+
+    @PostMapping("/update/info")
+    public Result<Void> updateInfo(@RequestBody UserUpdateDto userUpdateDto) {
+        if (userUpdateDto == null) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
+        userService.updateInfo(userUpdateDto);
+        return Result.success();
     }
 }

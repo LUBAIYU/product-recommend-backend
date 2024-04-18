@@ -6,11 +6,14 @@ import com.lzh.recommend.constant.UserConsts;
 import com.lzh.recommend.enums.ErrorCode;
 import com.lzh.recommend.exception.BusinessException;
 import com.lzh.recommend.model.dto.LoginDto;
+import com.lzh.recommend.model.dto.PageUserDto;
 import com.lzh.recommend.model.dto.RegisterDto;
 import com.lzh.recommend.model.dto.UserUpdateDto;
 import com.lzh.recommend.model.vo.UserVo;
 import com.lzh.recommend.service.UserService;
+import com.lzh.recommend.utils.PageBean;
 import com.lzh.recommend.utils.Result;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -95,5 +98,23 @@ public class UserController {
         }
         userService.updateInfo(userUpdateDto);
         return Result.success();
+    }
+
+    @DeleteMapping("/delete/{id}")
+    public Result<Void> delUserInfo(@PathVariable Long id) {
+        if (id == null || id <= 0) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
+        userService.delUserById(id);
+        return Result.success();
+    }
+
+    @GetMapping("/page")
+    public Result<PageBean<UserVo>> listUsersByPage(PageUserDto pageUserDto) {
+        if (pageUserDto == null) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
+        PageBean<UserVo> pageBean = userService.listUsersByPage(pageUserDto);
+        return Result.success(pageBean);
     }
 }

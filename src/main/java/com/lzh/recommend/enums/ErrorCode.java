@@ -26,7 +26,7 @@ public enum ErrorCode {
     private final int code;
 
     /**
-     * 信息
+     * 错误信息
      */
     private final String message;
 

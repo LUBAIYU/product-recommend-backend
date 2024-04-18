@@ -6,6 +6,7 @@ import cn.hutool.core.util.StrUtil;
 import cn.hutool.crypto.digest.DigestUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.lzh.recommend.constant.CommonConsts;
 import com.lzh.recommend.constant.UserConsts;
@@ -14,14 +15,18 @@ import com.lzh.recommend.enums.RoleEnum;
 import com.lzh.recommend.exception.BusinessException;
 import com.lzh.recommend.mapper.UserMapper;
 import com.lzh.recommend.model.dto.LoginDto;
+import com.lzh.recommend.model.dto.PageUserDto;
 import com.lzh.recommend.model.dto.RegisterDto;
 import com.lzh.recommend.model.dto.UserUpdateDto;
 import com.lzh.recommend.model.entity.User;
 import com.lzh.recommend.model.vo.UserVo;
 import com.lzh.recommend.service.UserService;
+import com.lzh.recommend.utils.PageBean;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.util.CollectionUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.servlet.http.HttpServletRequest;
@@ -30,12 +35,16 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * @author by
  */
 @Service
+@Slf4j
 public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         implements UserService {
 
@@ -55,22 +64,22 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         }
         //判断请求参数长度是否合法
         if (userName.length() < UserConsts.USER_NAME_LENGTH) {
-            throw new BusinessException(40000, UserConsts.USER_NAME_ERROR);
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, UserConsts.USER_NAME_ERROR);
         }
         if (userPassword.length() < UserConsts.USER_PASSWORD_LENGTH) {
-            throw new BusinessException(40000, UserConsts.USER_PASSWORD_ERROR);
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, UserConsts.USER_PASSWORD_ERROR);
         }
         //判断用户是否存在
         LambdaQueryWrapper<User> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(User::getUserName, userName);
         User user = this.getOne(wrapper);
         if (user == null) {
-            throw new BusinessException(40000, UserConsts.USER_PARAMS_ERROR);
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, UserConsts.USER_PARAMS_ERROR);
         }
         //判断密码是否正确
         String encryptPassword = DigestUtil.md5Hex(userPassword + user.getSalt());
         if (!user.getUserPassword().equals(encryptPassword)) {
-            throw new BusinessException(40000, UserConsts.USER_PARAMS_ERROR);
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, UserConsts.USER_PARAMS_ERROR);
         }
         //用户信息脱敏
         UserVo userVo = new UserVo();
@@ -93,21 +102,21 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         }
         //判断参数长度是否合法
         if (userName.length() < UserConsts.USER_NAME_LENGTH) {
-            throw new BusinessException(40000, UserConsts.USER_NAME_ERROR);
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, UserConsts.USER_NAME_ERROR);
         }
         if (userPassword.length() < UserConsts.USER_PASSWORD_LENGTH) {
-            throw new BusinessException(40000, UserConsts.USER_PASSWORD_ERROR);
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, UserConsts.USER_PASSWORD_ERROR);
         }
         //判断确认密码和密码是否一致
         if (!userPassword.equals(confirmPassword)) {
-            throw new BusinessException(40000, UserConsts.PASSWORD_NOT_EQUAL);
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, UserConsts.PASSWORD_NOT_EQUAL);
         }
         //判断用户名是否存在
         LambdaQueryWrapper<User> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(User::getUserName, userName);
         User user = this.getOne(wrapper);
         if (user != null) {
-            throw new BusinessException(40000, UserConsts.USER_NAME_EXIST);
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, UserConsts.USER_NAME_EXIST);
         }
         //生成一个随机的盐
         String salt = RandomUtil.randomString(4);
@@ -140,12 +149,12 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         //判断图片名称是否为空
         String originalFilename = multipartFile.getOriginalFilename();
         if (StrUtil.isBlank(originalFilename)) {
-            throw new BusinessException(40000, CommonConsts.IMAGE_UPLOAD_ERROR);
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, CommonConsts.IMAGE_UPLOAD_ERROR);
         }
         //判断图片后缀是否存在
         String suffix = originalFilename.substring(originalFilename.lastIndexOf("."));
         if (StrUtil.isBlank(suffix)) {
-            throw new BusinessException(40000, CommonConsts.IMAGE_FORMAT_ERROR);
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, CommonConsts.IMAGE_FORMAT_ERROR);
         }
         //生成随机文件名
         String newFileName = UUID.randomUUID().toString().replace("-", "") + suffix;
@@ -154,8 +163,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         try {
             multipartFile.transferTo(dest);
         } catch (Exception e) {
-            log.error("图片上传失败，{}", e);
-            throw new BusinessException(40000, CommonConsts.IMAGE_UPLOAD_ERROR);
+            log.error("图片上传失败", e);
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, CommonConsts.IMAGE_UPLOAD_ERROR);
         }
         //获取并返回图片请求路径
         return domain + "/user/get/avatar/" + newFileName;
@@ -183,8 +192,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
                 outputStream.write(buffer, 0, b);
             }
         } catch (IOException e) {
-            log.error("文件读取失败，{}", e);
-            throw new BusinessException(40000, CommonConsts.IMAGE_READ_ERROR);
+            log.error("文件读取失败", e);
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, CommonConsts.IMAGE_READ_ERROR);
         }
     }
 
@@ -198,39 +207,93 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         Integer age = userUpdateDto.getAge();
         String phone = userUpdateDto.getPhone();
         String address = userUpdateDto.getAddress();
-        //创建更新条件
-        LambdaUpdateWrapper<User> wrapper = new LambdaUpdateWrapper<>();
-        //校验部分参数
+        //校验参数是否合法
         if (id == null || id <= 0) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
+        LambdaUpdateWrapper<User> wrapper = new LambdaUpdateWrapper<>();
         wrapper.eq(User::getId, id);
-        wrapper.set(StrUtil.isNotBlank(userName), User::getUserName, userName);
-        wrapper.set(StrUtil.isNotBlank(userAvatar), User::getUserAvatar, userAvatar);
-        wrapper.set(StrUtil.isNotBlank(address), User::getAddress, address);
+        if (StrUtil.isNotBlank(userName)) {
+            wrapper.set(User::getUserName, userName);
+        }
+        wrapper.set(User::getUserAvatar, userAvatar);
+        wrapper.set(User::getAddress, address);
+        //如果想要更新年龄，则值需为0或1
         if (gender != null) {
-            //如果用户想要修改性别，只能输入0或1
             if (gender < 0 || gender > 1) {
-                throw new BusinessException(40000, UserConsts.GENDER_PARAM_ERROR);
+                throw new BusinessException(ErrorCode.PARAMS_ERROR, UserConsts.GENDER_PARAM_ERROR);
             }
-            wrapper.set(User::getGender, gender);
         }
+        wrapper.set(User::getGender, gender);
+        //如果想要更新年龄，则值需为0到100
         if (age != null) {
-            //如果用户想要修改年龄，只能输入0到100
             if (age < UserConsts.AGE_MIN || age > UserConsts.AGE_MAX) {
-                throw new BusinessException(40000, UserConsts.AGE_PARAM_ERROR);
+                throw new BusinessException(ErrorCode.PARAMS_ERROR, UserConsts.AGE_PARAM_ERROR);
             }
-            wrapper.set(User::getAge, age);
         }
-        if (phone != null) {
-            //如果用户想要修改电话号码，只能输入11位的字符串
+        wrapper.set(User::getAge, age);
+        //如果想要更新电话，则值需为11位数字
+        if (StrUtil.isNotBlank(phone)) {
             if (phone.length() != UserConsts.PHONE_REQUIRED_LENGTH) {
-                throw new BusinessException(40000, UserConsts.PHONE_PARAM_ERROR);
+                throw new BusinessException(ErrorCode.PARAMS_ERROR, UserConsts.PHONE_PARAM_ERROR);
             }
-            wrapper.set(User::getPhone, phone);
         }
+        wrapper.set(User::getPhone, phone);
         //执行更新操作
         this.update(wrapper);
+    }
+
+    @Override
+    public void delUserById(Long id) {
+        //判断用户是否存在
+        User user = this.getById(id);
+        if (user == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND_ERROR);
+        }
+        //存在则删除
+        this.removeById(id);
+    }
+
+    @Override
+    public PageBean<UserVo> listUsersByPage(PageUserDto pageUserDto) {
+        //获取分页参数
+        Integer current = pageUserDto.getCurrent();
+        Integer pageSize = pageUserDto.getPageSize();
+        Long id = pageUserDto.getId();
+        String userName = pageUserDto.getUserName();
+        Integer gender = pageUserDto.getGender();
+        //判断分页参数是否合法
+        if (current == null || pageSize == null) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, CommonConsts.PAGE_PARAMS_ERROR);
+        }
+        if (current <= 0 || pageSize < 0) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, CommonConsts.PAGE_PARAMS_ERROR);
+        }
+        //添加分页参数
+        Page<User> page = new Page<>(current, pageSize);
+        //添加条件参数
+        LambdaQueryWrapper<User> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(id != null, User::getId, id);
+        wrapper.like(StrUtil.isNotBlank(userName), User::getUserName, userName);
+        wrapper.eq(gender != null, User::getGender, gender);
+        //查询
+        this.page(page, wrapper);
+        //获取记录
+        long total = page.getTotal();
+        List<User> records = page.getRecords();
+        List<UserVo> userVoList = new ArrayList<>();
+        //如果记录为空直接返回
+        if (CollectionUtils.isEmpty(records)) {
+            return PageBean.of(total, userVoList);
+        }
+        //记录信息脱敏
+        userVoList = records.stream().map(user -> {
+            UserVo userVo = new UserVo();
+            BeanUtil.copyProperties(user, userVo);
+            return userVo;
+        }).collect(Collectors.toList());
+        //返回
+        return PageBean.of(total, userVoList);
     }
 }
 

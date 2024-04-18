@@ -2,10 +2,12 @@ package com.lzh.recommend.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.lzh.recommend.model.dto.LoginDto;
+import com.lzh.recommend.model.dto.PageUserDto;
 import com.lzh.recommend.model.dto.RegisterDto;
 import com.lzh.recommend.model.dto.UserUpdateDto;
 import com.lzh.recommend.model.entity.User;
 import com.lzh.recommend.model.vo.UserVo;
+import com.lzh.recommend.utils.PageBean;
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.servlet.http.HttpServletRequest;
@@ -62,4 +64,19 @@ public interface UserService extends IService<User> {
      * @param userUpdateDto 用户信息修改对象
      */
     void updateInfo(UserUpdateDto userUpdateDto);
+
+    /**
+     * 根据ID删除用户信息
+     *
+     * @param id 用户ID
+     */
+    void delUserById(Long id);
+
+    /**
+     * 条件分页查询用户信息
+     *
+     * @param pageUserDto 分页查询请求体
+     * @return 分页结果
+     */
+    PageBean<UserVo> listUsersByPage(PageUserDto pageUserDto);
 }

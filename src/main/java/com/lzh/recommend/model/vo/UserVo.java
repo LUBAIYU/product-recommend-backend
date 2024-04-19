@@ -5,7 +5,7 @@ import lombok.Data;
 import java.util.Date;
 
 /**
- * 用户信息脱敏
+ * 用户信息返回类
  *
  * @author by
  */
@@ -35,6 +35,16 @@ public class UserVo {
      * 年龄
      */
     private Integer age;
+
+    /**
+     * 手机号
+     */
+    private String phone;
+
+    /**
+     * 收货地址
+     */
+    private String address;
 
     /**
      * 角色（0-管理员，1-普通用户）

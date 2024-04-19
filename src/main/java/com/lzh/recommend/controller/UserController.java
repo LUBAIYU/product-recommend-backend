@@ -9,6 +9,7 @@ import com.lzh.recommend.model.dto.LoginDto;
 import com.lzh.recommend.model.dto.PageUserDto;
 import com.lzh.recommend.model.dto.RegisterDto;
 import com.lzh.recommend.model.dto.UserUpdateDto;
+import com.lzh.recommend.model.entity.User;
 import com.lzh.recommend.model.vo.UserVo;
 import com.lzh.recommend.service.UserService;
 import com.lzh.recommend.utils.PageBean;
@@ -110,11 +111,20 @@ public class UserController {
     }
 
     @GetMapping("/page")
-    public Result<PageBean<UserVo>> listUsersByPage(PageUserDto pageUserDto) {
+    public Result<PageBean<User>> listUsersByPage(PageUserDto pageUserDto) {
         if (pageUserDto == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
-        PageBean<UserVo> pageBean = userService.listUsersByPage(pageUserDto);
+        PageBean<User> pageBean = userService.listUsersByPage(pageUserDto);
         return Result.success(pageBean);
+    }
+
+    @GetMapping("/get/{id}")
+    public Result<UserVo> getUserById(@PathVariable Long id) {
+        if (id == null || id <= 0) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
+        UserVo userVo = userService.getUserById(id);
+        return Result.success(userVo);
     }
 }

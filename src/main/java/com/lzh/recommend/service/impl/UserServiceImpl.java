@@ -26,7 +26,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.util.CollectionUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.servlet.http.HttpServletRequest;
@@ -35,10 +34,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.OutputStream;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 /**
  * @author by
@@ -255,7 +251,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
     }
 
     @Override
-    public PageBean<UserVo> listUsersByPage(PageUserDto pageUserDto) {
+    public PageBean<User> listUsersByPage(PageUserDto pageUserDto) {
         //获取分页参数
         Integer current = pageUserDto.getCurrent();
         Integer pageSize = pageUserDto.getPageSize();
@@ -278,22 +274,21 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         wrapper.eq(gender != null, User::getGender, gender);
         //查询
         this.page(page, wrapper);
-        //获取记录
-        long total = page.getTotal();
-        List<User> records = page.getRecords();
-        List<UserVo> userVoList = new ArrayList<>();
-        //如果记录为空直接返回
-        if (CollectionUtils.isEmpty(records)) {
-            return PageBean.of(total, userVoList);
+        //返回记录
+        return PageBean.of(page.getTotal(), page.getRecords());
+    }
+
+    @Override
+    public UserVo getUserById(Long id) {
+        //查询用户是否存在
+        User user = this.getById(id);
+        if (user == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND_ERROR);
         }
-        //记录信息脱敏
-        userVoList = records.stream().map(user -> {
-            UserVo userVo = new UserVo();
-            BeanUtil.copyProperties(user, userVo);
-            return userVo;
-        }).collect(Collectors.toList());
-        //返回
-        return PageBean.of(total, userVoList);
+        //封装返回对象
+        UserVo userVo = new UserVo();
+        BeanUtil.copyProperties(user, userVo);
+        return userVo;
     }
 }
 

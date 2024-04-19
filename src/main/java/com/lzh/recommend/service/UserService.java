@@ -78,5 +78,13 @@ public interface UserService extends IService<User> {
      * @param pageUserDto 分页查询请求体
      * @return 分页结果
      */
-    PageBean<UserVo> listUsersByPage(PageUserDto pageUserDto);
+    PageBean<User> listUsersByPage(PageUserDto pageUserDto);
+
+    /**
+     * 根据ID查询用户信息
+     *
+     * @param id 用户ID
+     * @return 用户信息
+     */
+    UserVo getUserById(Long id);
 }

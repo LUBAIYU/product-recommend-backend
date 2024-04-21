@@ -141,7 +141,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
     }
 
     @Override
-    public String uploadImage(MultipartFile multipartFile) {
+    public String uploadImage(MultipartFile multipartFile, String prefix) {
         //判断图片名称是否为空
         String originalFilename = multipartFile.getOriginalFilename();
         if (StrUtil.isBlank(originalFilename)) {
@@ -163,11 +163,11 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
             throw new BusinessException(ErrorCode.PARAMS_ERROR, CommonConsts.IMAGE_UPLOAD_ERROR);
         }
         //获取并返回图片请求路径
-        return domain + "/user/get/avatar/" + newFileName;
+        return domain + prefix + newFileName;
     }
 
     @Override
-    public void getUserAvatar(String fileName, HttpServletResponse response) {
+    public void getImage(String fileName, HttpServletResponse response) {
         //获取文件后缀
         String suffix = fileName.substring(fileName.lastIndexOf(".") + 1);
         //获取图片存放路径

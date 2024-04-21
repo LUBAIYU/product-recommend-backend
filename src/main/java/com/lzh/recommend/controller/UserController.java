@@ -15,6 +15,7 @@ import com.lzh.recommend.model.vo.UserVo;
 import com.lzh.recommend.service.UserService;
 import com.lzh.recommend.utils.PageBean;
 import com.lzh.recommend.utils.Result;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -37,6 +38,9 @@ public class UserController {
 
     @Resource
     private UserService userService;
+
+    @Value("${product.recommend.path.user-prefix}")
+    private String prefix;
 
     @PostMapping("/login")
     public Result<UserVo> login(@RequestBody LoginDto loginDto, HttpServletRequest request) {
@@ -67,21 +71,21 @@ public class UserController {
 
     @PostMapping("/upload/avatar")
     @LoginCheck
-    public Result<String> uploadImage(MultipartFile multipartFile) {
+    public Result<String> uploadAvatar(MultipartFile multipartFile) {
         if (multipartFile == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
-        String imageUrl = userService.uploadImage(multipartFile);
+        String imageUrl = userService.uploadImage(multipartFile, prefix);
         return Result.success(imageUrl);
     }
 
     @GetMapping("/get/avatar/{fileName}")
     @LoginCheck
-    public void getUserAvatar(@PathVariable String fileName, HttpServletResponse response) {
+    public void getAvatar(@PathVariable String fileName, HttpServletResponse response) {
         if (StrUtil.isBlank(fileName) || response == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
-        userService.getUserAvatar(fileName, response);
+        userService.getImage(fileName, response);
     }
 
     @PostMapping("/logout")

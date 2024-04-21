@@ -30,3 +30,5 @@ product:
     path:
       domain: http://localhost:8080
       address: D:\idea\project\product-recommend\src\main\resources\images
+      user-prefix: /user/get/avatar/
+      product-prefix: /product/get/image/

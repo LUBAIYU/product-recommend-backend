@@ -46,9 +46,10 @@ public interface UserService extends IService<User> {
      * 上传图片
      *
      * @param multipartFile 文件上传对象
+     * @param prefix        路径前缀
      * @return 文件名路径
      */
-    String uploadImage(MultipartFile multipartFile);
+    String uploadImage(MultipartFile multipartFile, String prefix);
 
     /**
      * 获取用户头像并设置到response中
@@ -56,7 +57,7 @@ public interface UserService extends IService<User> {
      * @param fileName 文件名
      * @param response 响应对象
      */
-    void getUserAvatar(String fileName, HttpServletResponse response);
+    void getImage(String fileName, HttpServletResponse response);
 
     /**
      * 修改用户信息

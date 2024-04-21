@@ -2,6 +2,7 @@ package com.lzh.recommend.controller;
 
 import cn.hutool.core.util.StrUtil;
 import com.lzh.recommend.annotation.LoginCheck;
+import com.lzh.recommend.annotation.MustAdmin;
 import com.lzh.recommend.constant.UserConsts;
 import com.lzh.recommend.enums.ErrorCode;
 import com.lzh.recommend.exception.BusinessException;
@@ -65,6 +66,7 @@ public class UserController {
     }
 
     @PostMapping("/upload/avatar")
+    @LoginCheck
     public Result<String> uploadImage(MultipartFile multipartFile) {
         if (multipartFile == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
@@ -74,6 +76,7 @@ public class UserController {
     }
 
     @GetMapping("/get/avatar/{fileName}")
+    @LoginCheck
     public void getUserAvatar(@PathVariable String fileName, HttpServletResponse response) {
         if (StrUtil.isBlank(fileName) || response == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
@@ -93,6 +96,7 @@ public class UserController {
     }
 
     @PostMapping("/update/info")
+    @LoginCheck
     public Result<Void> updateInfo(@RequestBody UserUpdateDto userUpdateDto) {
         if (userUpdateDto == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
@@ -102,6 +106,7 @@ public class UserController {
     }
 
     @DeleteMapping("/delete/{id}")
+    @MustAdmin
     public Result<Void> delUserInfo(@PathVariable Long id) {
         if (id == null || id <= 0) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
@@ -111,6 +116,7 @@ public class UserController {
     }
 
     @GetMapping("/page")
+    @MustAdmin
     public Result<PageBean<User>> listUsersByPage(PageUserDto pageUserDto) {
         if (pageUserDto == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
@@ -120,6 +126,7 @@ public class UserController {
     }
 
     @GetMapping("/get/{id}")
+    @MustAdmin
     public Result<UserVo> getUserById(@PathVariable Long id) {
         if (id == null || id <= 0) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);

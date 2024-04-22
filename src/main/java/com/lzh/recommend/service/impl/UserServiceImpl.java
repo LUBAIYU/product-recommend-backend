@@ -72,6 +72,10 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         if (user == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, UserConsts.USER_PARAMS_ERROR);
         }
+        //判断用户是否有权限访问后台管理系统
+        if (user.getRole() == 1) {
+            throw new BusinessException(ErrorCode.NO_AUTH_ERROR);
+        }
         //判断密码是否正确
         String encryptPassword = DigestUtil.md5Hex(userPassword + user.getSalt());
         if (!user.getUserPassword().equals(encryptPassword)) {

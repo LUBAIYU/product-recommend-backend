@@ -2,6 +2,7 @@ package com.lzh.recommend.controller;
 
 import cn.hutool.core.util.StrUtil;
 import com.lzh.recommend.annotation.LoginCheck;
+import com.lzh.recommend.annotation.MustAdmin;
 import com.lzh.recommend.enums.ErrorCode;
 import com.lzh.recommend.exception.BusinessException;
 import com.lzh.recommend.model.dto.PageProductDto;
@@ -64,6 +65,7 @@ public class ProductController {
 
 
     @PostMapping("/add/info")
+    @MustAdmin
     public Result<Void> addProduct(@RequestBody ProductAddDto productAddDto) {
         if (productAddDto == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
@@ -73,6 +75,7 @@ public class ProductController {
     }
 
     @DeleteMapping("/delete/{id}")
+    @MustAdmin
     public Result<Void> delProduct(@PathVariable Long id) {
         if (id == null || id <= 0) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
@@ -82,6 +85,7 @@ public class ProductController {
     }
 
     @PutMapping("/update/info")
+    @MustAdmin
     public Result<Void> updateProduct(@RequestBody ProductUpdateDto productUpdateDto) {
         if (productUpdateDto == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
@@ -91,6 +95,7 @@ public class ProductController {
     }
 
     @GetMapping("/page")
+    @MustAdmin
     public Result<PageBean<Product>> listProductsByPage(PageProductDto pageProductDto) {
         if (pageProductDto == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
@@ -100,6 +105,7 @@ public class ProductController {
     }
 
     @PutMapping("/alter/status")
+    @MustAdmin
     public Result<Void> altStatus(Long id, Integer status) {
         if (id == null || status == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);

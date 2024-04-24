@@ -13,11 +13,21 @@ import com.lzh.recommend.mapper.ProductMapper;
 import com.lzh.recommend.model.dto.PageProductDto;
 import com.lzh.recommend.model.dto.ProductAddDto;
 import com.lzh.recommend.model.dto.ProductUpdateDto;
+import com.lzh.recommend.model.dto.SearchProductDto;
 import com.lzh.recommend.model.entity.Product;
+import com.lzh.recommend.model.vo.ProductVo;
 import com.lzh.recommend.service.ProductService;
+import com.lzh.recommend.service.RecordService;
 import com.lzh.recommend.utils.PageBean;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
+import org.springframework.util.CollectionUtils;
+
+import javax.annotation.Resource;
+import javax.servlet.http.HttpServletRequest;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * @author by
@@ -25,6 +35,9 @@ import org.springframework.stereotype.Service;
 @Service
 public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product>
         implements ProductService {
+
+    @Resource
+    private RecordService recordService;
 
     @Override
     public void addProduct(ProductAddDto productAddDto) {
@@ -144,6 +157,56 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product>
         //更新状态
         product.setStatus(status);
         this.updateById(product);
+    }
+
+    @Override
+    public PageBean<ProductVo> searchProducts(SearchProductDto searchProductDto, HttpServletRequest request) {
+        //获取请求参数
+        Integer current = searchProductDto.getCurrent();
+        Integer pageSize = searchProductDto.getPageSize();
+        String name = searchProductDto.getName();
+        //校验参数
+        if (current == null || pageSize == null) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, CommonConsts.PAGE_PARAMS_ERROR);
+        }
+        if (current <= 0 || pageSize < 0) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, CommonConsts.PAGE_PARAMS_ERROR);
+        }
+        //添加分页条件
+        Page<Product> page = new Page<>(current, pageSize);
+        //添加查询条件
+        LambdaQueryWrapper<Product> wrapper = new LambdaQueryWrapper<>();
+        wrapper.like(Product::getName, name);
+        wrapper.eq(Product::getStatus, 0);
+        //查询
+        this.page(page, wrapper);
+        //搜索结果脱敏
+        long total = page.getTotal();
+        List<Product> records = page.getRecords();
+        List<ProductVo> productVos = new ArrayList<>();
+        //如果为空直接返回
+        if (CollectionUtils.isEmpty(records)) {
+            return PageBean.of(total, productVos);
+        }
+        //重新封装
+        productVos = records.stream().map(product -> {
+            ProductVo productVo = new ProductVo();
+            BeanUtil.copyProperties(product, productVo);
+            return productVo;
+        }).collect(Collectors.toList());
+        //如果用户输入的商品名称为空直接返回
+        if (StrUtil.isBlank(name)) {
+            return PageBean.of(total, productVos);
+        }
+        //存储用户搜索记录
+        recordService.addRecords(productVos, request);
+        //返回结果
+        return PageBean.of(total, productVos);
+    }
+
+    @Override
+    public PageBean<ProductVo> recommend(HttpServletRequest request) {
+        return null;
     }
 }
 

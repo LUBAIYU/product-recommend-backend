@@ -12,6 +12,8 @@ spring:
   jackson:
     date-format: "yyyy-MM-dd HH:mm:ss"
     time-zone: GMT+8
+  session:
+    timeout: 86400
 
 
 mybatis-plus:

@@ -8,7 +8,9 @@ import com.lzh.recommend.exception.BusinessException;
 import com.lzh.recommend.model.dto.PageProductDto;
 import com.lzh.recommend.model.dto.ProductAddDto;
 import com.lzh.recommend.model.dto.ProductUpdateDto;
+import com.lzh.recommend.model.dto.SearchProductDto;
 import com.lzh.recommend.model.entity.Product;
+import com.lzh.recommend.model.vo.ProductVo;
 import com.lzh.recommend.service.ProductService;
 import com.lzh.recommend.service.UserService;
 import com.lzh.recommend.utils.PageBean;
@@ -25,6 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.annotation.Resource;
+import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
 /**
@@ -112,5 +115,25 @@ public class ProductController {
         }
         productService.alterStatus(id, status);
         return Result.success();
+    }
+
+    @GetMapping("/search")
+    @LoginCheck
+    public Result<PageBean<ProductVo>> searchProducts(SearchProductDto searchProductDto, HttpServletRequest request) {
+        if (searchProductDto == null) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
+        PageBean<ProductVo> pageBean = productService.searchProducts(searchProductDto, request);
+        return Result.success(pageBean);
+    }
+
+    @GetMapping("/recommend")
+    @LoginCheck
+    public Result<PageBean<ProductVo>> recommendProducts(HttpServletRequest request) {
+        if (request == null) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
+        PageBean<ProductVo> pageBean = productService.recommend(request);
+        return Result.success(pageBean);
     }
 }

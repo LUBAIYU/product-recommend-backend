@@ -5,6 +5,7 @@ import com.lzh.recommend.annotation.LoginCheck;
 import com.lzh.recommend.annotation.MustAdmin;
 import com.lzh.recommend.enums.ErrorCode;
 import com.lzh.recommend.exception.BusinessException;
+import com.lzh.recommend.model.dto.PageDto;
 import com.lzh.recommend.model.dto.PageProductDto;
 import com.lzh.recommend.model.dto.ProductAddDto;
 import com.lzh.recommend.model.dto.ProductUpdateDto;
@@ -127,13 +128,14 @@ public class ProductController {
         return Result.success(pageBean);
     }
 
+
     @GetMapping("/recommend")
     @LoginCheck
-    public Result<PageBean<ProductVo>> recommendProducts(HttpServletRequest request) {
-        if (request == null) {
+    public Result<PageBean<ProductVo>> recommendProducts(PageDto pageDto, HttpServletRequest request) {
+        if (pageDto == null || request == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
-        PageBean<ProductVo> pageBean = productService.recommend(request);
+        PageBean<ProductVo> pageBean = productService.recommend(pageDto, request);
         return Result.success(pageBean);
     }
 }

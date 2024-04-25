@@ -19,4 +19,12 @@ public interface RecordService extends IService<Record> {
      * @param request    请求体
      */
     void addRecords(List<ProductVo> productVos, HttpServletRequest request);
+
+    /**
+     * 加入购物车后添加分数
+     *
+     * @param productId 商品ID
+     * @param userId    用户ID
+     */
+    void addScores(Long productId, Long userId);
 }

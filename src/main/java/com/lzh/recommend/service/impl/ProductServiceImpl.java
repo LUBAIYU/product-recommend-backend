@@ -10,6 +10,7 @@ import com.lzh.recommend.constant.ProductConsts;
 import com.lzh.recommend.enums.ErrorCode;
 import com.lzh.recommend.exception.BusinessException;
 import com.lzh.recommend.mapper.ProductMapper;
+import com.lzh.recommend.model.dto.PageDto;
 import com.lzh.recommend.model.dto.PageProductDto;
 import com.lzh.recommend.model.dto.ProductAddDto;
 import com.lzh.recommend.model.dto.ProductUpdateDto;
@@ -205,7 +206,17 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product>
     }
 
     @Override
-    public PageBean<ProductVo> recommend(HttpServletRequest request) {
+    public PageBean<ProductVo> recommend(PageDto pageDto, HttpServletRequest request) {
+        //获取请求参数
+        Integer current = pageDto.getCurrent();
+        Integer pageSize = pageDto.getPageSize();
+        //校验参数
+        if (current == null || pageSize == null) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, CommonConsts.PAGE_PARAMS_ERROR);
+        }
+        if (current <= 0 || pageSize < 0) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, CommonConsts.PAGE_PARAMS_ERROR);
+        }
         return null;
     }
 }

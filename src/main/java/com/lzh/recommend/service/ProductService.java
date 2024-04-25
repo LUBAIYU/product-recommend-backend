@@ -1,6 +1,7 @@
 package com.lzh.recommend.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
+import com.lzh.recommend.model.dto.PageDto;
 import com.lzh.recommend.model.dto.PageProductDto;
 import com.lzh.recommend.model.dto.ProductAddDto;
 import com.lzh.recommend.model.dto.ProductUpdateDto;
@@ -64,10 +65,12 @@ public interface ProductService extends IService<Product> {
     PageBean<ProductVo> searchProducts(SearchProductDto searchProductDto, HttpServletRequest request);
 
     /**
+     * todo  学习完协同过滤算法后再实现
      * 推荐商品
      *
+     * @param pageDto 分页参数
      * @param request 请求对象
      * @return 推荐结果
      */
-    PageBean<ProductVo> recommend(HttpServletRequest request);
+    PageBean<ProductVo> recommend(PageDto pageDto, HttpServletRequest request);
 }

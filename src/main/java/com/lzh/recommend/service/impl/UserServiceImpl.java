@@ -54,8 +54,12 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         //获取请求参数
         String userName = loginDto.getUserName();
         String userPassword = loginDto.getUserPassword();
+        Boolean isClient = loginDto.getIsClient();
         //判断请求参数是否为空
         if (StringUtils.isAnyBlank(userName, userPassword)) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
+        if (isClient == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
         //判断请求参数长度是否合法
@@ -72,8 +76,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         if (user == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, UserConsts.USER_PARAMS_ERROR);
         }
-        //判断用户是否有权限访问后台管理系统
-        if (user.getRole() == 1) {
+        //判断请求来自客户端还是管理员端
+        if (!isClient && user.getRole() == 1) {
             throw new BusinessException(ErrorCode.NO_AUTH_ERROR);
         }
         //判断密码是否正确

@@ -13,4 +13,5 @@ import java.io.Serializable;
 public class LoginDto implements Serializable {
     private String userName;
     private String userPassword;
+    private Boolean isClient;
 }

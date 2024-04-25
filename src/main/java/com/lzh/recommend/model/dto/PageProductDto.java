@@ -1,6 +1,7 @@
 package com.lzh.recommend.model.dto;
 
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 import java.io.Serializable;
 
@@ -9,16 +10,9 @@ import java.io.Serializable;
  *
  * @author by
  */
+@EqualsAndHashCode(callSuper = true)
 @Data
-public class PageProductDto implements Serializable {
-    /**
-     * 当前页码
-     */
-    private Integer current;
-    /**
-     * 每页记录数
-     */
-    private Integer pageSize;
+public class PageProductDto extends PageDto implements Serializable {
     /**
      * 商品ID
      */

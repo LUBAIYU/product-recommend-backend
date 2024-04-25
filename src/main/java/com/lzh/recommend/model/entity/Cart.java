@@ -3,7 +3,6 @@ package com.lzh.recommend.model.entity;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
-import com.baomidou.mybatisplus.annotation.TableLogic;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
@@ -11,15 +10,15 @@ import java.io.Serializable;
 import java.util.Date;
 
 /**
- * 搜索记录表
+ * 购物车信息表
  *
  * @author by
  */
-@TableName(value = "record")
+@TableName(value = "cart")
 @Data
-public class Record implements Serializable {
+public class Cart implements Serializable {
     /**
-     * 记录ID
+     * 购物车ID
      */
     @TableId(type = IdType.AUTO)
     private Long id;
@@ -35,9 +34,9 @@ public class Record implements Serializable {
     private Long productId;
 
     /**
-     * 分数，根据分数给用户推荐商品
+     * 购买数量
      */
-    private Integer score;
+    private Integer num;
 
     /**
      * 创建时间
@@ -50,9 +49,8 @@ public class Record implements Serializable {
     private Date updateTime;
 
     /**
-     * 是否删除（0-存在，1-删除）
+     * 是否删除（0-未删除，1-删除）
      */
-    @TableLogic
     private Integer isDeleted;
 
     @TableField(exist = false)

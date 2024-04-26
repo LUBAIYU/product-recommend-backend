@@ -92,6 +92,7 @@ public class CartServiceImpl extends ServiceImpl<CartMapper, Cart>
         if (!cart.getUserId().equals(userId)) {
             throw new BusinessException(ErrorCode.NO_AUTH_ERROR);
         }
+        //点击一次取消是将购买数量减1
         int newNum = cart.getNum() - 1;
         cart.setNum(newNum);
         this.updateById(cart);

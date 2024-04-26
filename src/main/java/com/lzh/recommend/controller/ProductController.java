@@ -140,7 +140,7 @@ public class ProductController {
     }
 
 
-    @PostMapping("/purchase")
+    @GetMapping("/purchase")
     @LoginCheck
     public Result<Void> purchaseProducts(Long cartId, HttpServletRequest request) {
         if (cartId == null || cartId <= 0 || request == null) {

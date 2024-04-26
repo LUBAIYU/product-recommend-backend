@@ -73,4 +73,12 @@ public interface ProductService extends IService<Product> {
      * @return 推荐结果
      */
     PageBean<ProductVo> recommend(PageDto pageDto, HttpServletRequest request);
+
+    /**
+     * 购买商品
+     *
+     * @param cartId  购物车ID
+     * @param request 请求对象
+     */
+    void purchaseProducts(Long cartId, HttpServletRequest request);
 }

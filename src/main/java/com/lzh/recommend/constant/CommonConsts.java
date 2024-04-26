@@ -11,4 +11,5 @@ public interface CommonConsts {
     String IMAGE_FORMAT_ERROR = "文件格式错误！";
     String IMAGE_READ_ERROR = "文件读取失败！";
     String PAGE_PARAMS_ERROR = "分页参数异常";
+    String PRODUCT_STOCK_ERROR = "商品库存不足";
 }

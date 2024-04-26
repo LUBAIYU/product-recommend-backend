@@ -8,6 +8,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.lzh.recommend.constant.CommonConsts;
 import com.lzh.recommend.constant.ProductConsts;
 import com.lzh.recommend.enums.ErrorCode;
+import com.lzh.recommend.enums.ScoreEnum;
 import com.lzh.recommend.exception.BusinessException;
 import com.lzh.recommend.mapper.ProductMapper;
 import com.lzh.recommend.model.dto.PageDto;
@@ -15,19 +16,26 @@ import com.lzh.recommend.model.dto.PageProductDto;
 import com.lzh.recommend.model.dto.ProductAddDto;
 import com.lzh.recommend.model.dto.ProductUpdateDto;
 import com.lzh.recommend.model.dto.SearchProductDto;
+import com.lzh.recommend.model.entity.Cart;
 import com.lzh.recommend.model.entity.Product;
+import com.lzh.recommend.model.entity.Record;
 import com.lzh.recommend.model.vo.ProductVo;
+import com.lzh.recommend.model.vo.UserVo;
+import com.lzh.recommend.service.CartService;
 import com.lzh.recommend.service.ProductService;
 import com.lzh.recommend.service.RecordService;
+import com.lzh.recommend.service.UserService;
 import com.lzh.recommend.utils.PageBean;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.CollectionUtils;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
 /**
@@ -38,7 +46,13 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product>
         implements ProductService {
 
     @Resource
+    private UserService userService;
+    @Resource
     private RecordService recordService;
+    @Resource
+    private CartService cartService;
+
+    private final ReentrantLock lock = new ReentrantLock();
 
     @Override
     public void addProduct(ProductAddDto productAddDto) {
@@ -218,6 +232,54 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product>
             throw new BusinessException(ErrorCode.PARAMS_ERROR, CommonConsts.PAGE_PARAMS_ERROR);
         }
         return null;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void purchaseProducts(Long cartId, HttpServletRequest request) {
+        //判断购物车信息是否存在
+        Cart cart = cartService.getById(cartId);
+        if (cart == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND_ERROR);
+        }
+        //获取登录用户ID
+        UserVo userVo = userService.getLoginUser(request);
+        Long userId = userVo.getId();
+        //判断ID是否一致
+        if (!cart.getUserId().equals(userId)) {
+            throw new BusinessException(ErrorCode.NO_AUTH_ERROR);
+        }
+        //加锁
+        lock.lock();
+        try {
+            //判断商品库存是否为0
+            Product product = this.getById(cart.getProductId());
+            if (product.getStock() == 0) {
+                throw new BusinessException(ErrorCode.PARAMS_ERROR, CommonConsts.PRODUCT_STOCK_ERROR);
+            }
+            //判断库存是否足够
+            if (product.getStock() < cart.getNum()) {
+                throw new BusinessException(ErrorCode.PARAMS_ERROR, CommonConsts.PRODUCT_STOCK_ERROR);
+            }
+            //减少商品库存
+            product.setStock(product.getStock() - cart.getNum());
+            this.updateById(product);
+            //删除购物车
+            cartService.removeById(cartId);
+        } finally {
+            lock.unlock();
+        }
+        //根据用户ID和商品ID去查记录表
+        LambdaQueryWrapper<Record> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(Record::getUserId, userId);
+        wrapper.eq(Record::getProductId, cart.getProductId());
+        Record record = recordService.getOne(wrapper);
+        //给对应记录添加分数，值为3
+        if (record == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND_ERROR);
+        }
+        record.setScore(record.getScore() + ScoreEnum.THREE.getScore());
+        recordService.updateById(record);
     }
 }
 

@@ -138,4 +138,15 @@ public class ProductController {
         PageBean<ProductVo> pageBean = productService.recommend(pageDto, request);
         return Result.success(pageBean);
     }
+
+
+    @PostMapping("/purchase")
+    @LoginCheck
+    public Result<Void> purchaseProducts(Long cartId, HttpServletRequest request) {
+        if (cartId == null || cartId <= 0 || request == null) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
+        productService.purchaseProducts(cartId, request);
+        return Result.success();
+    }
 }

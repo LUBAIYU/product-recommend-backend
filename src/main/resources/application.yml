@@ -14,6 +14,9 @@ spring:
     time-zone: GMT+8
   session:
     timeout: 86400
+  # 允许循环依赖
+  main:
+    allow-circular-references: true
 
 
 mybatis-plus:

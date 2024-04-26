@@ -9,9 +9,11 @@ import com.lzh.recommend.model.entity.Record;
 import com.lzh.recommend.model.vo.ProductVo;
 import com.lzh.recommend.model.vo.UserVo;
 import com.lzh.recommend.service.RecordService;
+import com.lzh.recommend.service.UserService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
 import java.util.List;
 
@@ -23,11 +25,13 @@ import java.util.List;
 public class RecordServiceImpl extends ServiceImpl<RecordMapper, Record>
         implements RecordService {
 
+    @Resource
+    private UserService userService;
+
     @Override
     public void addRecords(List<ProductVo> productVos, HttpServletRequest request) {
         //获取登录的用户ID
-        Object object = request.getSession().getAttribute(UserConsts.USER_LOGIN_STATE);
-        UserVo userVo = (UserVo) object;
+        UserVo userVo = userService.getLoginUser(request);
         Long userId = userVo.getId();
         //添加记录
         LambdaQueryWrapper<Record> wrapper;

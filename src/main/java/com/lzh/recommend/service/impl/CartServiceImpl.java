@@ -69,6 +69,8 @@ public class CartServiceImpl extends ServiceImpl<CartMapper, Cart>
             cart.setProductId(productId);
             cart.setNum(1);
             this.save(cart);
+            //添加记录
+            recordService.addScores(productId, userId);
             return;
         }
         //存在记录则加数量加1

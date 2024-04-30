@@ -1,7 +1,6 @@
 package com.lzh.recommend.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
-import com.lzh.recommend.model.dto.PageDto;
 import com.lzh.recommend.model.dto.PageProductDto;
 import com.lzh.recommend.model.dto.ProductAddDto;
 import com.lzh.recommend.model.dto.ProductUpdateDto;
@@ -11,6 +10,9 @@ import com.lzh.recommend.model.vo.ProductVo;
 import com.lzh.recommend.utils.PageBean;
 
 import javax.servlet.http.HttpServletRequest;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 
 /**
@@ -68,11 +70,11 @@ public interface ProductService extends IService<Product> {
      * todo  学习完协同过滤算法后再实现
      * 推荐商品
      *
-     * @param pageDto 分页参数
+     * @param count   推荐数量
      * @param request 请求对象
      * @return 推荐结果
      */
-    PageBean<ProductVo> recommend(PageDto pageDto, HttpServletRequest request);
+    List<ProductVo> recommend(Integer count, HttpServletRequest request);
 
     /**
      * 购买商品
@@ -81,4 +83,43 @@ public interface ProductService extends IService<Product> {
      * @param request 请求对象
      */
     void purchaseProducts(Long cartId, HttpServletRequest request);
+
+    /**
+     * 随机获取商品
+     *
+     * @param count 获取数量
+     * @return 商品列表
+     */
+    List<ProductVo> randomProducts(Integer count);
+
+    /**
+     * 协同过滤算法
+     *
+     * @param loginUserId 登录用户ID
+     * @param count       推荐商品数量
+     * @return 商品列表
+     */
+    List<ProductVo> collaborativeFiltering(Long loginUserId, Integer count);
+
+    /**
+     * 计算相似度，获取相似度集合
+     *
+     * @param loginUserId           登录用户ID
+     * @param userIdProductIdsMap   用户Id商品ID集合
+     * @param loginUserProductIdSet 登录用户商品ID集合
+     * @param similarityMap         相似度集合
+     */
+    void getSimilarityMap(Long loginUserId, Map<Long, Set<Long>> userIdProductIdsMap, Set<Long> loginUserProductIdSet, Map<Long, Double> similarityMap);
+
+    /**
+     * 计算最终评分
+     *
+     * @param commonProductSet    共同商品集合
+     * @param similarityMap       相似度集合
+     * @param userIdProductIdsMap 用户Id商品ID集合
+     * @param loginUserAvgScore   登录用户平均评分
+     * @param finalScoreMap       最终评分集合
+     * @param similaritySum       相似度之和
+     */
+    void getFinalScoreMap(Set<Long> commonProductSet, Map<Long, Double> similarityMap, Map<Long, Set<Long>> userIdProductIdsMap, double loginUserAvgScore, Map<Long, Double> finalScoreMap, double similaritySum);
 }

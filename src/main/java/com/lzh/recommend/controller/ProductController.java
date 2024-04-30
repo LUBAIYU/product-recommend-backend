@@ -5,7 +5,6 @@ import com.lzh.recommend.annotation.LoginCheck;
 import com.lzh.recommend.annotation.MustAdmin;
 import com.lzh.recommend.enums.ErrorCode;
 import com.lzh.recommend.exception.BusinessException;
-import com.lzh.recommend.model.dto.PageDto;
 import com.lzh.recommend.model.dto.PageProductDto;
 import com.lzh.recommend.model.dto.ProductAddDto;
 import com.lzh.recommend.model.dto.ProductUpdateDto;
@@ -30,6 +29,7 @@ import org.springframework.web.multipart.MultipartFile;
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+import java.util.List;
 
 /**
  * 商品控制器
@@ -131,12 +131,12 @@ public class ProductController {
 
     @GetMapping("/recommend")
     @LoginCheck
-    public Result<PageBean<ProductVo>> recommendProducts(PageDto pageDto, HttpServletRequest request) {
-        if (pageDto == null || request == null) {
+    public Result<List<ProductVo>> recommendProducts(Integer count, HttpServletRequest request) {
+        if (count == null || count < 0 || request == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
-        PageBean<ProductVo> pageBean = productService.recommend(pageDto, request);
-        return Result.success(pageBean);
+        List<ProductVo> productVos = productService.recommend(count, request);
+        return Result.success(productVos);
     }
 
 

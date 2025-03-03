@@ -10,6 +10,7 @@ import com.lzh.recommend.constant.ProductConsts;
 import com.lzh.recommend.enums.ErrorCode;
 import com.lzh.recommend.enums.ScoreEnum;
 import com.lzh.recommend.exception.BusinessException;
+import com.lzh.recommend.manager.FileManager;
 import com.lzh.recommend.mapper.ProductMapper;
 import com.lzh.recommend.mapper.RecordMapper;
 import com.lzh.recommend.model.dto.PageProductDto;
@@ -27,20 +28,16 @@ import com.lzh.recommend.service.RecordService;
 import com.lzh.recommend.service.UserService;
 import com.lzh.recommend.utils.PageBean;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.CollectionUtils;
+import org.springframework.web.multipart.MultipartFile;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
+import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
@@ -61,9 +58,13 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product>
     private ProductMapper productMapper;
     @Resource
     private RecordMapper recordMapper;
+    @Resource
+    private FileManager fileManager;
 
+    @Value("${product.recommend.path.product-image-prefix}")
+    private String productImagePrefix;
 
-    private final ReentrantLock lock = new ReentrantLock();
+    private final Lock lock = new ReentrantLock();
 
     @Override
     public void addProduct(ProductAddDto productAddDto) {
@@ -445,6 +446,16 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product>
             double predictScore = loginUserAvgScore + productScore / similaritySum;
             finalScoreMap.put(productId, predictScore);
         }
+    }
+
+    @Override
+    public String uploadImage(MultipartFile multipartFile, HttpServletRequest request) {
+        // 获取当前登录用户
+        UserVo loginUser = userService.getLoginUser(request);
+        // 构造地址前缀
+        String uploadImagePrefix = String.format("%s/%s", productImagePrefix, loginUser.getId());
+        // 上传图片
+        return fileManager.uploadFile(multipartFile, uploadImagePrefix);
     }
 }
 

@@ -11,7 +11,6 @@ import com.lzh.recommend.utils.PageBean;
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
 
 /**
  * @author by
@@ -46,18 +45,10 @@ public interface UserService extends IService<User> {
      * 上传图片
      *
      * @param multipartFile 文件上传对象
-     * @param prefix        路径前缀
-     * @return 文件名路径
+     * @param request       请求对象
+     * @return 文件路径
      */
-    String uploadImage(MultipartFile multipartFile, String prefix);
-
-    /**
-     * 获取用户头像并设置到response中
-     *
-     * @param fileName 文件名
-     * @param response 响应对象
-     */
-    void getImage(String fileName, HttpServletResponse response);
+    String uploadImage(MultipartFile multipartFile, HttpServletRequest request);
 
     /**
      * 修改用户信息

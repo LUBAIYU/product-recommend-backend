@@ -8,6 +8,7 @@ import com.lzh.recommend.model.dto.SearchProductDto;
 import com.lzh.recommend.model.entity.Product;
 import com.lzh.recommend.model.vo.ProductVo;
 import com.lzh.recommend.utils.PageBean;
+import org.springframework.web.multipart.MultipartFile;
 
 import javax.servlet.http.HttpServletRequest;
 import java.util.List;
@@ -67,7 +68,6 @@ public interface ProductService extends IService<Product> {
     PageBean<ProductVo> searchProducts(SearchProductDto searchProductDto, HttpServletRequest request);
 
     /**
-     * todo  学习完协同过滤算法后再实现
      * 推荐商品
      *
      * @param count   推荐数量
@@ -122,4 +122,13 @@ public interface ProductService extends IService<Product> {
      * @param similaritySum       相似度之和
      */
     void getFinalScoreMap(Set<Long> commonProductSet, Map<Long, Double> similarityMap, Map<Long, Set<Long>> userIdProductIdsMap, double loginUserAvgScore, Map<Long, Double> finalScoreMap, double similaritySum);
+
+    /**
+     * 上传图片
+     *
+     * @param multipartFile 文件
+     * @param request       请求对象
+     * @return 文件地址
+     */
+    String uploadImage(MultipartFile multipartFile, HttpServletRequest request);
 }

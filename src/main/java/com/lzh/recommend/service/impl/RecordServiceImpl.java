@@ -2,7 +2,6 @@ package com.lzh.recommend.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import com.lzh.recommend.constant.UserConsts;
 import com.lzh.recommend.enums.ScoreEnum;
 import com.lzh.recommend.mapper.RecordMapper;
 import com.lzh.recommend.model.entity.Record;

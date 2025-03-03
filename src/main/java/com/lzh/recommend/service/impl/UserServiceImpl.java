@@ -13,6 +13,7 @@ import com.lzh.recommend.constant.UserConsts;
 import com.lzh.recommend.enums.ErrorCode;
 import com.lzh.recommend.enums.RoleEnum;
 import com.lzh.recommend.exception.BusinessException;
+import com.lzh.recommend.manager.FileManager;
 import com.lzh.recommend.mapper.UserMapper;
 import com.lzh.recommend.model.dto.LoginDto;
 import com.lzh.recommend.model.dto.PageUserDto;
@@ -28,13 +29,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.io.OutputStream;
-import java.util.UUID;
 
 /**
  * @author by
@@ -44,41 +40,34 @@ import java.util.UUID;
 public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         implements UserService {
 
-    @Value("${product.recommend.path.domain}")
-    private String domain;
-    @Value("${product.recommend.path.address}")
-    private String address;
+    @Value("${product.recommend.path.user-avatar-prefix}")
+    private String userAvatarPrefix;
+
+    @Resource
+    private FileManager fileManager;
 
     @Override
     public UserVo login(LoginDto loginDto, HttpServletRequest request) {
         //获取请求参数
-        String userName = loginDto.getUserName();
+        String userAccount = loginDto.getUserAccount();
         String userPassword = loginDto.getUserPassword();
-        Boolean isClient = loginDto.getIsClient();
         //判断请求参数是否为空
-        if (StringUtils.isAnyBlank(userName, userPassword)) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR);
-        }
-        if (isClient == null) {
+        if (StringUtils.isAnyBlank(userAccount, userPassword)) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
         //判断请求参数长度是否合法
-        if (userName.length() < UserConsts.USER_NAME_LENGTH) {
+        if (userAccount.length() < UserConsts.USER_ACCOUNT_LENGTH) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, UserConsts.USER_NAME_ERROR);
         }
         if (userPassword.length() < UserConsts.USER_PASSWORD_LENGTH) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, UserConsts.USER_PASSWORD_ERROR);
         }
         //判断用户是否存在
-        LambdaQueryWrapper<User> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(User::getUserName, userName);
-        User user = this.getOne(wrapper);
+        User user = this.lambdaQuery()
+                .eq(User::getUserAccount, userAccount)
+                .one();
         if (user == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, UserConsts.USER_PARAMS_ERROR);
-        }
-        //判断请求来自客户端还是管理员端
-        if (!isClient && user.getRole() == 1) {
-            throw new BusinessException(ErrorCode.NO_AUTH_ERROR);
         }
         //判断密码是否正确
         String encryptPassword = DigestUtil.md5Hex(userPassword + user.getSalt());
@@ -97,15 +86,15 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
     @Override
     public void register(RegisterDto registerDto) {
         //获取请求参数
-        String userName = registerDto.getUserName();
+        String userAccount = registerDto.getUserAccount();
         String userPassword = registerDto.getUserPassword();
         String confirmPassword = registerDto.getConfirmPassword();
         //判断参数是否为空
-        if (StringUtils.isAnyBlank(userName, userPassword, confirmPassword)) {
+        if (StringUtils.isAnyBlank(userAccount, userPassword, confirmPassword)) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
         //判断参数长度是否合法
-        if (userName.length() < UserConsts.USER_NAME_LENGTH) {
+        if (userAccount.length() < UserConsts.USER_ACCOUNT_LENGTH) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, UserConsts.USER_NAME_ERROR);
         }
         if (userPassword.length() < UserConsts.USER_PASSWORD_LENGTH) {
@@ -116,9 +105,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
             throw new BusinessException(ErrorCode.PARAMS_ERROR, UserConsts.PASSWORD_NOT_EQUAL);
         }
         //判断用户名是否存在
-        LambdaQueryWrapper<User> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(User::getUserName, userName);
-        User user = this.getOne(wrapper);
+        User user = this.lambdaQuery()
+                .eq(User::getUserAccount, userAccount)
+                .one();
         if (user != null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, UserConsts.USER_NAME_EXIST);
         }
@@ -128,7 +117,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         String encryptPassword = DigestUtil.md5Hex(userPassword + salt);
         //插入用户数据
         user = new User();
-        user.setUserName(userName);
+        user.setUserAccount(userAccount);
         user.setUserPassword(encryptPassword);
         user.setRole(RoleEnum.USER.getCode());
         user.setSalt(salt);
@@ -149,56 +138,13 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
     }
 
     @Override
-    public String uploadImage(MultipartFile multipartFile, String prefix) {
-        //判断图片名称是否为空
-        String originalFilename = multipartFile.getOriginalFilename();
-        if (StrUtil.isBlank(originalFilename)) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, CommonConsts.IMAGE_UPLOAD_ERROR);
-        }
-        //判断图片后缀是否存在
-        String suffix = originalFilename.substring(originalFilename.lastIndexOf("."));
-        if (StrUtil.isBlank(suffix)) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, CommonConsts.IMAGE_FORMAT_ERROR);
-        }
-        //生成随机文件名
-        String newFileName = UUID.randomUUID().toString().replace("-", "") + suffix;
-        //上传图片
-        File dest = new File(address + "/" + newFileName);
-        try {
-            multipartFile.transferTo(dest);
-        } catch (Exception e) {
-            log.error("图片上传失败", e);
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, CommonConsts.IMAGE_UPLOAD_ERROR);
-        }
-        //获取并返回图片请求路径
-        return domain + prefix + newFileName;
-    }
-
-    @Override
-    public void getImage(String fileName, HttpServletResponse response) {
-        //获取文件后缀
-        String suffix = fileName.substring(fileName.lastIndexOf(".") + 1);
-        //获取图片存放路径
-        String url = address + "/" + fileName;
-        //响应图片
-        response.setContentType("image/" + suffix);
-        //从服务器中读取图片
-        try (
-                //获取输出流
-                OutputStream outputStream = response.getOutputStream();
-                //获取输入流
-                FileInputStream fileInputStream = new FileInputStream(url)
-        ) {
-            byte[] buffer = new byte[1024];
-            int b;
-            while ((b = fileInputStream.read(buffer)) != -1) {
-                //将图片以字节流形式写入输出流
-                outputStream.write(buffer, 0, b);
-            }
-        } catch (IOException e) {
-            log.error("文件读取失败", e);
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, CommonConsts.IMAGE_READ_ERROR);
-        }
+    public String uploadImage(MultipartFile multipartFile, HttpServletRequest request) {
+        // 获取登录用户
+        UserVo loginUser = this.getLoginUser(request);
+        // 构造图片路径前缀
+        String uploadPathPrefix = String.format("%s/%s", userAvatarPrefix, loginUser.getId());
+        // 上传图片
+        return fileManager.uploadFile(multipartFile, uploadPathPrefix);
     }
 
     @Override

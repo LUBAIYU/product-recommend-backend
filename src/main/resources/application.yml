@@ -1,7 +1,16 @@
 server:
   port: 8080
+  # 全局请求前缀
+  servlet:
+    context-path: /api
 
 spring:
+  profiles:
+    active: local
+  # 文件上传开放更大的体积
+  servlet:
+    multipart:
+      max-file-size: 10MB
   # 配置数据源
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -17,10 +26,6 @@ spring:
   # 允许循环依赖
   main:
     allow-circular-references: true
-  mvc:
-    pathmatch:
-      matching-strategy: ant_path_matcher
-
 
 mybatis-plus:
   global-config:
@@ -32,11 +37,21 @@ mybatis-plus:
   configuration:
     log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
 
+# knife4j 配置
+knife4j:
+  enable: true
+  openapi:
+    title: "接口文档"
+    version: 1.0
+    group:
+      default:
+        api-rule: package
+        api-rule-resources:
+          - com.lzh.recommend.controller
+
 # 自定义图片上传路径
 product:
   recommend:
     path:
-      domain: http://localhost:8080
-      address: D:\idea\project\product-recommend\src\main\resources\images
-      user-prefix: /user/get/avatar/
-      product-prefix: /product/get/image/
+      product-image-prefix: /product/product-image
+      user-avatar-prefix: /product/user-avatar

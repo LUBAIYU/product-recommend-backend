@@ -40,12 +40,12 @@ public class UserController {
     }
 
     @PostMapping("/register")
-    public Result<Void> userRegister(@RequestBody RegisterDto registerDto) {
+    public Result<Boolean> userRegister(@RequestBody RegisterDto registerDto) {
         if (registerDto == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
         userService.register(registerDto);
-        return Result.success();
+        return Result.success(true);
     }
 
     @GetMapping("/get/loginUser")
@@ -69,38 +69,38 @@ public class UserController {
 
     @PostMapping("/logout")
     @LoginCheck
-    public Result<Void> logout(HttpServletRequest request) {
+    public Result<Boolean> userLogout(HttpServletRequest request) {
         if (request == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
         //移除登录态
         request.getSession().setAttribute(UserConsts.USER_LOGIN_STATE, null);
-        return Result.success();
+        return Result.success(true);
     }
 
     @PutMapping("/update/info")
     @LoginCheck
-    public Result<Void> updateInfo(@RequestBody UserUpdateDto userUpdateDto) {
+    public Result<Boolean> updateUserInfo(@RequestBody UserUpdateDto userUpdateDto) {
         if (userUpdateDto == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
         userService.updateInfo(userUpdateDto);
-        return Result.success();
+        return Result.success(true);
     }
 
     @DeleteMapping("/delete/{id}")
     @MustAdmin
-    public Result<Void> delUserInfo(@PathVariable Long id) {
+    public Result<Boolean> deleteUserById(@PathVariable Long id) {
         if (id == null || id <= 0) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
         userService.delUserById(id);
-        return Result.success();
+        return Result.success(true);
     }
 
-    @GetMapping("/page")
+    @PostMapping("/page")
     @MustAdmin
-    public Result<PageBean<User>> listUsersByPage(PageUserDto pageUserDto) {
+    public Result<PageBean<User>> listUsersByPage(@RequestBody PageUserDto pageUserDto) {
         if (pageUserDto == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }

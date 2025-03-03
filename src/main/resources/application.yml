@@ -23,9 +23,18 @@ spring:
     time-zone: GMT+8
   session:
     timeout: 86400
+    # 表示从Redis中读写Session
+    store-type: redis     # 默认为none 表示存储在单台服务器
   # 允许循环依赖
   main:
     allow-circular-references: true
+
+  # Redis 配置
+  redis:
+    database: 1
+    host: localhost
+    port: 6379
+    timeout: 5000
 
 mybatis-plus:
   global-config:

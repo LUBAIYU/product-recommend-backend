@@ -151,6 +151,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
     public void updateInfo(UserUpdateDto userUpdateDto) {
         //获取请求参数
         Long id = userUpdateDto.getId();
+        String userAccount = userUpdateDto.getUserAccount();
         String userName = userUpdateDto.getUserName();
         String userAvatar = userUpdateDto.getUserAvatar();
         Integer gender = userUpdateDto.getGender();
@@ -163,12 +164,13 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         }
         LambdaUpdateWrapper<User> wrapper = new LambdaUpdateWrapper<>();
         wrapper.eq(User::getId, id);
-        if (StrUtil.isNotBlank(userName)) {
-            wrapper.set(User::getUserName, userName);
+        if (StrUtil.isNotBlank(userAccount)) {
+            wrapper.set(User::getUserAccount, userAccount);
         }
+        wrapper.set(User::getUserName, userName);
         wrapper.set(User::getUserAvatar, userAvatar);
         wrapper.set(User::getAddress, address);
-        //如果想要更新年龄，则值需为0或1
+        //如果想要更新性别，则值需为0或1
         if (gender != null) {
             if (gender < 0 || gender > 1) {
                 throw new BusinessException(ErrorCode.PARAMS_ERROR, UserConsts.GENDER_PARAM_ERROR);
@@ -210,6 +212,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         Integer current = pageUserDto.getCurrent();
         Integer pageSize = pageUserDto.getPageSize();
         Long id = pageUserDto.getId();
+        String userAccount = pageUserDto.getUserAccount();
         String userName = pageUserDto.getUserName();
         Integer gender = pageUserDto.getGender();
         //判断分页参数是否合法
@@ -224,8 +227,10 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         //添加条件参数
         LambdaQueryWrapper<User> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(id != null, User::getId, id);
+        wrapper.like(StrUtil.isNotBlank(userAccount), User::getUserAccount, userAccount);
         wrapper.like(StrUtil.isNotBlank(userName), User::getUserName, userName);
         wrapper.eq(gender != null, User::getGender, gender);
+        wrapper.orderByDesc(User::getCreateTime);
         //查询
         this.page(page, wrapper);
         //返回记录

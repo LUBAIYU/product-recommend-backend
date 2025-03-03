@@ -2,6 +2,7 @@ package com.lzh.recommend.model.vo;
 
 import lombok.Data;
 
+import java.io.Serializable;
 import java.util.Date;
 
 /**
@@ -10,7 +11,7 @@ import java.util.Date;
  * @author by
  */
 @Data
-public class UserVo {
+public class UserVo implements Serializable {
     /**
      * 用户ID
      */

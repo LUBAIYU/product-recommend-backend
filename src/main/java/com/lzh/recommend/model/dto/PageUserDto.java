@@ -18,6 +18,10 @@ public class PageUserDto extends PageDto implements Serializable {
      */
     private Long id;
     /**
+     * 用户账号
+     */
+    private String userAccount;
+    /**
      * 用户名
      */
     private String userName;

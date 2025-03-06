@@ -8,6 +8,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.lzh.recommend.constant.CommonConsts;
 import com.lzh.recommend.constant.ProductConsts;
 import com.lzh.recommend.enums.ErrorCode;
+import com.lzh.recommend.enums.ProductStatusEnum;
 import com.lzh.recommend.enums.ScoreEnum;
 import com.lzh.recommend.exception.BusinessException;
 import com.lzh.recommend.manager.FileManager;
@@ -67,7 +68,7 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product>
     private final Lock lock = new ReentrantLock();
 
     @Override
-    public void addProduct(ProductAddDto productAddDto) {
+    public long addProduct(ProductAddDto productAddDto) {
         //获取请求参数
         String name = productAddDto.getName();
         String image = productAddDto.getImage();
@@ -85,14 +86,19 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product>
             throw new BusinessException(ErrorCode.PARAMS_ERROR, ProductConsts.STOCK_PARAM_ERROR);
         }
         if (status != null) {
-            if (status < 0 || status > 1) {
+            ProductStatusEnum statusEnum = ProductStatusEnum.getEnumByCode(status);
+            if (statusEnum == null) {
                 throw new BusinessException(ErrorCode.PARAMS_ERROR, ProductConsts.STATUS_PARAM_ERROR);
             }
         }
         Product product = new Product();
         BeanUtil.copyProperties(productAddDto, product);
+        if (status == null) {
+            product.setStatus(ProductStatusEnum.ON_SALE.getCode());
+        }
         //新增
         this.save(product);
+        return product.getId();
     }
 
     @Override
@@ -103,7 +109,7 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product>
             throw new BusinessException(ErrorCode.NOT_FOUND_ERROR);
         }
         //判断商品是否处于上架状态
-        if (product.getStatus() == 0) {
+        if (product.getStatus().equals(ProductStatusEnum.ON_SALE.getCode())) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, ProductConsts.DELETE_PRODUCT_ERROR);
         }
         //删除商品
@@ -169,7 +175,11 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product>
     @Override
     public void alterStatus(Long id, Integer status) {
         //判断参数是否合法
-        if (id <= 0 || status < 0 || status > 1) {
+        if (id <= 0) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
+        ProductStatusEnum statusEnum = ProductStatusEnum.getEnumByCode(status);
+        if (statusEnum == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
         //判断ID是否存在
@@ -204,7 +214,7 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product>
         //添加查询条件
         LambdaQueryWrapper<Product> wrapper = new LambdaQueryWrapper<>();
         wrapper.like(Product::getName, name);
-        wrapper.eq(Product::getStatus, 0);
+        wrapper.eq(Product::getStatus, ProductStatusEnum.ON_SALE.getCode());
         //查询
         this.page(page, wrapper);
         //搜索结果脱敏

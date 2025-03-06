@@ -42,39 +42,39 @@ public class ProductController {
         return Result.success(imageUrl);
     }
 
-    @PostMapping("/add/info")
+    @PostMapping("/add")
     @MustAdmin
-    public Result<Void> addProduct(@RequestBody ProductAddDto productAddDto) {
+    public Result<Long> addProduct(@RequestBody ProductAddDto productAddDto) {
         if (productAddDto == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
-        productService.addProduct(productAddDto);
-        return Result.success();
+        long id = productService.addProduct(productAddDto);
+        return Result.success(id);
     }
 
     @DeleteMapping("/delete/{id}")
     @MustAdmin
-    public Result<Void> delProduct(@PathVariable Long id) {
+    public Result<Boolean> delProduct(@PathVariable Long id) {
         if (id == null || id <= 0) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
         productService.deleteById(id);
-        return Result.success();
+        return Result.success(true);
     }
 
-    @PutMapping("/update/info")
+    @PutMapping("/update")
     @MustAdmin
-    public Result<Void> updateProduct(@RequestBody ProductUpdateDto productUpdateDto) {
+    public Result<Boolean> updateProduct(@RequestBody ProductUpdateDto productUpdateDto) {
         if (productUpdateDto == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
         productService.updateProduct(productUpdateDto);
-        return Result.success();
+        return Result.success(true);
     }
 
-    @GetMapping("/page")
+    @PostMapping("/page")
     @MustAdmin
-    public Result<PageBean<Product>> listProductsByPage(PageProductDto pageProductDto) {
+    public Result<PageBean<Product>> listProductsByPage(@RequestBody PageProductDto pageProductDto) {
         if (pageProductDto == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
@@ -84,17 +84,17 @@ public class ProductController {
 
     @PutMapping("/alter/status")
     @MustAdmin
-    public Result<Void> altStatus(Long id, Integer status) {
+    public Result<Boolean> altStatus(Long id, Integer status) {
         if (id == null || status == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
         productService.alterStatus(id, status);
-        return Result.success();
+        return Result.success(true);
     }
 
-    @GetMapping("/search")
+    @PostMapping("/search")
     @LoginCheck
-    public Result<PageBean<ProductVo>> searchProducts(SearchProductDto searchProductDto, HttpServletRequest request) {
+    public Result<PageBean<ProductVo>> searchProducts(@RequestBody SearchProductDto searchProductDto, HttpServletRequest request) {
         if (searchProductDto == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
@@ -116,11 +116,11 @@ public class ProductController {
 
     @GetMapping("/purchase")
     @LoginCheck
-    public Result<Void> purchaseProducts(Long cartId, HttpServletRequest request) {
+    public Result<Boolean> purchaseProducts(Long cartId, HttpServletRequest request) {
         if (cartId == null || cartId <= 0 || request == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
         productService.purchaseProducts(cartId, request);
-        return Result.success();
+        return Result.success(true);
     }
 }

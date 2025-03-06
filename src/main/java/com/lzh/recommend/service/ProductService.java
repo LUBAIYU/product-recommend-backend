@@ -25,8 +25,9 @@ public interface ProductService extends IService<Product> {
      * 新增商品
      *
      * @param productAddDto 新增商品请求体
+     * @return 商品ID
      */
-    void addProduct(ProductAddDto productAddDto);
+    long addProduct(ProductAddDto productAddDto);
 
     /**
      * 根据ID删除商品

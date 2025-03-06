@@ -20,7 +20,7 @@ public class Cart implements Serializable {
     /**
      * 购物车ID
      */
-    @TableId(type = IdType.AUTO)
+    @TableId(type = IdType.ASSIGN_ID)
     private Long id;
 
     /**

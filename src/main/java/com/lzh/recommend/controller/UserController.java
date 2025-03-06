@@ -78,7 +78,7 @@ public class UserController {
         return Result.success(true);
     }
 
-    @PutMapping("/update/info")
+    @PutMapping("/update")
     @LoginCheck
     public Result<Boolean> updateUserInfo(@RequestBody UserUpdateDto userUpdateDto) {
         if (userUpdateDto == null) {

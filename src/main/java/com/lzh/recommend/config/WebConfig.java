@@ -2,9 +2,15 @@ package com.lzh.recommend.config;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.converter.HttpMessageConverter;
+import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
-import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurationSupport;
+
+import javax.annotation.Resource;
+import java.util.List;
+import java.util.Objects;
 
 /**
  * @author by
@@ -13,9 +19,14 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
  */
 @Configuration
 @Slf4j
-public class CorsConfig implements WebMvcConfigurer {
+public class WebConfig extends WebMvcConfigurationSupport {
+
+    @Resource
+    private MappingJackson2HttpMessageConverter mappingJackson2HttpMessageConverter;
+
     @Override
-    public void addCorsMappings(CorsRegistry registry) {
+    protected void addCorsMappings(CorsRegistry registry) {
+        log.info("开启跨域配置...");
         // 覆盖所有请求
         registry.addMapping("/**")
                 // 允许发送 Cookie
@@ -28,9 +39,19 @@ public class CorsConfig implements WebMvcConfigurer {
     }
 
     @Override
-    public void addResourceHandlers(ResourceHandlerRegistry registry) {
+    protected void addResourceHandlers(ResourceHandlerRegistry registry) {
         log.info("开启设置静态资源映射...");
         registry.addResourceHandler("/doc.html").addResourceLocations("classpath:/META-INF/resources/");
         registry.addResourceHandler("/webjars/**").addResourceLocations("classpath:/META-INF/resources/webjars/");
+    }
+
+    @Override
+    protected void extendMessageConverters(List<HttpMessageConverter<?>> converters) {
+        converters.removeIf(converter -> converter instanceof MappingJackson2HttpMessageConverter);
+        if (Objects.isNull(mappingJackson2HttpMessageConverter)) {
+            converters.add(0, new MappingJackson2HttpMessageConverter());
+        } else {
+            converters.add(0, mappingJackson2HttpMessageConverter);
+        }
     }
 }

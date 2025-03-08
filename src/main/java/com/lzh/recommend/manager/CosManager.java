@@ -34,4 +34,13 @@ public class CosManager {
         PutObjectRequest putObjectRequest = new PutObjectRequest(clientConfig.getBucket(), key, file);
         return cosClient.putObject(putObjectRequest);
     }
+
+    /**
+     * 删除文件
+     *
+     * @param key 文件路径
+     */
+    public void deleteObject(String key) {
+        cosClient.deleteObject(clientConfig.getBucket(), key);
+    }
 }

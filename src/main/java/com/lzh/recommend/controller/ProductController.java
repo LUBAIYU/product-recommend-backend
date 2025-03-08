@@ -52,6 +52,16 @@ public class ProductController {
         return Result.success(id);
     }
 
+    @GetMapping("/get/{id}")
+    @MustAdmin
+    public Result<Product> getProductById(@PathVariable Long id) {
+        if (id == null || id <= 0) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
+        Product product = productService.getById(id);
+        return Result.success(product);
+    }
+
     @DeleteMapping("/delete/{id}")
     @MustAdmin
     public Result<Boolean> delProduct(@PathVariable Long id) {

@@ -18,7 +18,6 @@ import com.lzh.recommend.model.dto.PageProductDto;
 import com.lzh.recommend.model.dto.ProductAddDto;
 import com.lzh.recommend.model.dto.ProductUpdateDto;
 import com.lzh.recommend.model.dto.SearchProductDto;
-import com.lzh.recommend.model.entity.Cart;
 import com.lzh.recommend.model.entity.Product;
 import com.lzh.recommend.model.entity.Record;
 import com.lzh.recommend.model.vo.ProductVo;
@@ -28,6 +27,7 @@ import com.lzh.recommend.service.ProductService;
 import com.lzh.recommend.service.RecordService;
 import com.lzh.recommend.service.UserService;
 import com.lzh.recommend.utils.PageBean;
+import com.lzh.recommend.utils.ThrowUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -213,24 +213,22 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product>
         Page<Product> page = new Page<>(current, pageSize);
         //添加查询条件
         LambdaQueryWrapper<Product> wrapper = new LambdaQueryWrapper<>();
-        wrapper.like(Product::getName, name);
+        wrapper.like(StrUtil.isNotBlank(name), Product::getName, name);
         wrapper.eq(Product::getStatus, ProductStatusEnum.ON_SALE.getCode());
         //查询
         this.page(page, wrapper);
         //搜索结果脱敏
         long total = page.getTotal();
         List<Product> records = page.getRecords();
-        List<ProductVo> productVos = new ArrayList<>();
+        List<ProductVo> productVos;
         //如果为空直接返回
         if (CollectionUtils.isEmpty(records)) {
-            return PageBean.of(total, productVos);
+            return PageBean.of(total, Collections.emptyList());
         }
         //重新封装
-        productVos = records.stream().map(product -> {
-            ProductVo productVo = new ProductVo();
-            BeanUtil.copyProperties(product, productVo);
-            return productVo;
-        }).collect(Collectors.toList());
+        productVos = records.stream()
+                .map(product -> BeanUtil.copyProperties(product, ProductVo.class))
+                .collect(Collectors.toList());
         //如果用户输入的商品名称为空直接返回
         if (StrUtil.isBlank(name)) {
             return PageBean.of(total, productVos);
@@ -263,50 +261,48 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product>
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void purchaseProducts(Long cartId, HttpServletRequest request) {
-        //判断购物车信息是否存在
-        Cart cart = cartService.getById(cartId);
-        if (cart == null) {
-            throw new BusinessException(ErrorCode.NOT_FOUND_ERROR);
-        }
-        //获取登录用户ID
-        UserVo userVo = userService.getLoginUser(request);
-        Long userId = userVo.getId();
-        //判断ID是否一致
-        if (!cart.getUserId().equals(userId)) {
-            throw new BusinessException(ErrorCode.NO_AUTH_ERROR);
-        }
-        //加锁
+    public void purchaseProduct(Long productId, HttpServletRequest request) {
+        // 判断商品是否存在
+        Product product = this.getById(productId);
+        ThrowUtils.throwIf(product == null, ErrorCode.NOT_FOUND_ERROR);
+
+        // 获取当前登录用户ID
+        UserVo loginUser = userService.getLoginUser(request);
+        Long loginUserId = loginUser.getId();
+
+        // 加锁，防止库存超卖
         lock.lock();
         try {
-            //判断商品库存是否为0
-            Product product = this.getById(cart.getProductId());
-            if (product.getStock() == 0) {
+            // 判断商品库存是否足够
+            Integer stock = product.getStock();
+            if (stock == 0 || stock < 1) {
                 throw new BusinessException(ErrorCode.PARAMS_ERROR, CommonConsts.PRODUCT_STOCK_ERROR);
             }
-            //判断库存是否足够
-            if (product.getStock() < cart.getNum()) {
-                throw new BusinessException(ErrorCode.PARAMS_ERROR, CommonConsts.PRODUCT_STOCK_ERROR);
-            }
-            //减少商品库存
-            product.setStock(product.getStock() - cart.getNum());
+            // 更新库存
+            product.setStock(stock - 1);
             this.updateById(product);
-            //删除购物车
-            cartService.removeById(cartId);
         } finally {
+            // 解锁
             lock.unlock();
         }
-        //根据用户ID和商品ID去查记录表
-        LambdaQueryWrapper<Record> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(Record::getUserId, userId);
-        wrapper.eq(Record::getProductId, cart.getProductId());
-        Record record = recordService.getOne(wrapper);
-        //给对应记录添加分数，值为3
-        if (record == null) {
-            throw new BusinessException(ErrorCode.NOT_FOUND_ERROR);
+
+        // 判断记录是否存在
+        Record record = recordService.lambdaQuery()
+                .eq(Record::getUserId, loginUserId)
+                .eq(Record::getProductId, productId)
+                .one();
+        // 如果存在则更新分数
+        if (record != null) {
+            record.setScore(record.getScore() + ScoreEnum.TWO.getScore());
+            recordService.updateById(record);
+        } else {
+            // 不存在，则插入记录
+            record = new Record();
+            record.setProductId(productId);
+            record.setUserId(loginUserId);
+            record.setScore(ScoreEnum.TWO.getScore());
+            recordService.save(record);
         }
-        record.setScore(record.getScore() + ScoreEnum.THREE.getScore());
-        recordService.updateById(record);
     }
 
     @Override

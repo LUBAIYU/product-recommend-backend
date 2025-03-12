@@ -22,9 +22,10 @@ spring:
     date-format: "yyyy-MM-dd HH:mm:ss"
     time-zone: GMT+8
   session:
-    timeout: 86400
+    timeout: 43200
     # 表示从Redis中读写Session
     store-type: redis     # 默认为none 表示存储在单台服务器
+
   # 允许循环依赖
   main:
     allow-circular-references: true

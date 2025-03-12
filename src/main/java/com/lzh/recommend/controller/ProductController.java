@@ -1,5 +1,6 @@
 package com.lzh.recommend.controller;
 
+import cn.hutool.core.bean.BeanUtil;
 import com.lzh.recommend.annotation.LoginCheck;
 import com.lzh.recommend.annotation.MustAdmin;
 import com.lzh.recommend.enums.ErrorCode;
@@ -62,6 +63,17 @@ public class ProductController {
         return Result.success(product);
     }
 
+    @GetMapping("/get/vo/{id}")
+    @LoginCheck
+    public Result<ProductVo> getProductVoById(@PathVariable Long id) {
+        if (id == null || id <= 0) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
+        Product product = productService.getById(id);
+        ProductVo productVo = BeanUtil.copyProperties(product, ProductVo.class);
+        return Result.success(productVo);
+    }
+
     @DeleteMapping("/delete/{id}")
     @MustAdmin
     public Result<Boolean> delProduct(@PathVariable Long id) {
@@ -113,7 +125,7 @@ public class ProductController {
     }
 
 
-    @GetMapping("/recommend")
+    @PostMapping("/recommend")
     @LoginCheck
     public Result<List<ProductVo>> recommendProducts(Integer count, HttpServletRequest request) {
         if (count == null || count < 0 || request == null) {
@@ -124,13 +136,13 @@ public class ProductController {
     }
 
 
-    @GetMapping("/purchase")
+    @PostMapping("/purchase")
     @LoginCheck
-    public Result<Boolean> purchaseProducts(Long cartId, HttpServletRequest request) {
-        if (cartId == null || cartId <= 0 || request == null) {
+    public Result<Boolean> purchaseProduct(Long productId, HttpServletRequest request) {
+        if (productId == null || productId <= 0) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
-        productService.purchaseProducts(cartId, request);
+        productService.purchaseProduct(productId, request);
         return Result.success(true);
     }
 }

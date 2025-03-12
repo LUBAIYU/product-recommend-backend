@@ -80,10 +80,10 @@ public interface ProductService extends IService<Product> {
     /**
      * 购买商品
      *
-     * @param cartId  购物车ID
-     * @param request 请求对象
+     * @param productId 商品ID
+     * @param request   请求对象
      */
-    void purchaseProducts(Long cartId, HttpServletRequest request);
+    void purchaseProduct(Long productId, HttpServletRequest request);
 
     /**
      * 随机获取商品

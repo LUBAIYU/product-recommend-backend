@@ -20,6 +20,7 @@ import com.lzh.recommend.service.ProductService;
 import com.lzh.recommend.service.RecordService;
 import com.lzh.recommend.service.UserService;
 import com.lzh.recommend.utils.PageBean;
+import com.lzh.recommend.utils.ThrowUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,8 +28,12 @@ import org.springframework.util.CollectionUtils;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
-import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
 /**
@@ -46,9 +51,11 @@ public class CartServiceImpl extends ServiceImpl<CartMapper, Cart>
     @Resource
     private ProductService productService;
 
+    private final Lock lock = new ReentrantLock();
+
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void addCart(Long productId, HttpServletRequest request) {
+    public long addCart(Long productId, HttpServletRequest request) {
         //判断商品是否存在
         Product product = productService.getById(productId);
         if (product == null) {
@@ -69,15 +76,15 @@ public class CartServiceImpl extends ServiceImpl<CartMapper, Cart>
             cart.setProductId(productId);
             cart.setNum(1);
             this.save(cart);
-            //添加记录
-            recordService.addScores(productId, userId);
-            return;
+            return cart.getId();
+        } else {
+            //存在记录则加数量加1
+            dbCart.setNum(dbCart.getNum() + 1);
+            this.updateById(dbCart);
         }
-        //存在记录则加数量加1
-        dbCart.setNum(dbCart.getNum() + 1);
-        this.updateById(dbCart);
         //更新记录表，增加积分，作为推荐算法数据源
         recordService.addScores(productId, userId);
+        return 0L;
     }
 
     @Override
@@ -117,7 +124,7 @@ public class CartServiceImpl extends ServiceImpl<CartMapper, Cart>
         //更新分数
         recordService.updateById(record);
         //如果分数为0，则删除该记录
-        if (newScore == 0) {
+        if (newScore <= 0) {
             recordService.removeById(record);
         }
     }
@@ -133,9 +140,11 @@ public class CartServiceImpl extends ServiceImpl<CartMapper, Cart>
         if (current <= 0 || pageSize < 0) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, CommonConsts.PAGE_PARAMS_ERROR);
         }
+
         //获取登录的用户ID
         UserVo userVo = userService.getLoginUser(request);
         Long userId = userVo.getId();
+
         //开启分页
         Page<Cart> page = new Page<>(current, pageSize);
         //根据用户ID去查购物车信息表
@@ -143,18 +152,32 @@ public class CartServiceImpl extends ServiceImpl<CartMapper, Cart>
         wrapper.eq(Cart::getUserId, userId);
         //分页条件查询
         this.page(page, wrapper);
+
         //获取数据
         long total = page.getTotal();
         List<Cart> cartList = page.getRecords();
-        List<CartVo> cartVoList = new ArrayList<>();
         //如果数据为空直接返回
         if (CollectionUtils.isEmpty(cartList)) {
-            return PageBean.of(total, cartVoList);
+            return PageBean.of(total, Collections.emptyList());
         }
+
+        // 获取商品ID列表
+        List<Long> productIdList = cartList.stream().map(Cart::getProductId)
+                .collect(Collectors.toList());
+        // 批量查询商品信息
+        List<Product> productList = productService.lambdaQuery()
+                .in(Product::getId, productIdList)
+                .list();
+        // 将商品信息映射为Map
+        Map<Long, Product> productIdProductMap = new HashMap<>(16);
+        for (Product product : productList) {
+            productIdProductMap.put(product.getId(), product);
+        }
+
         //封装数据
-        cartVoList = cartList.stream().map(cart -> {
+        List<CartVo> cartVoList = cartList.stream().map(cart -> {
             CartVo cartVo = new CartVo();
-            Product product = productService.getById(cart.getProductId());
+            Product product = productIdProductMap.get(cart.getProductId());
             cartVo.setCartId(cart.getId());
             BeanUtil.copyProperties(product, cartVo);
             BeanUtil.copyProperties(cart, cartVo);
@@ -162,6 +185,50 @@ public class CartServiceImpl extends ServiceImpl<CartMapper, Cart>
         }).collect(Collectors.toList());
         //返回
         return PageBean.of(total, cartVoList);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void purchaseProductByCart(Long cartId, HttpServletRequest request) {
+        // 判断购物车是否存在
+        Cart cart = this.getById(cartId);
+        ThrowUtils.throwIf(cart == null, ErrorCode.NOT_FOUND_ERROR);
+
+        // 获取登录用户ID
+        UserVo loginUser = userService.getLoginUser(request);
+        Long loginUserId = loginUser.getId();
+        // 判断是否有权限
+        if (!cart.getUserId().equals(loginUserId)) {
+            throw new BusinessException(ErrorCode.NO_AUTH_ERROR);
+        }
+
+        // 加锁，防止商品超卖
+        lock.lock();
+        try {
+            // 判断商品库存是否足够
+            Product product = productService.getById(cart.getProductId());
+            Integer stock = product.getStock();
+            if (stock == 0 || stock < cart.getNum()) {
+                throw new BusinessException(ErrorCode.PARAMS_ERROR, CommonConsts.PRODUCT_STOCK_ERROR);
+            }
+            //减少商品库存
+            product.setStock(stock - cart.getNum());
+            productService.updateById(product);
+            //删除购物车
+            this.removeById(cartId);
+        } finally {
+            // 解锁
+            lock.unlock();
+        }
+
+        // 给对应记录添加分数，值为3
+        Record record = recordService.lambdaQuery()
+                .eq(Record::getUserId, loginUserId)
+                .eq(Record::getProductId, cart.getProductId())
+                .one();
+        ThrowUtils.throwIf(record == null, ErrorCode.NOT_FOUND_ERROR);
+        record.setScore(record.getScore() + ScoreEnum.THREE.getScore());
+        recordService.updateById(record);
     }
 }
 

@@ -18,8 +18,9 @@ public interface CartService extends IService<Cart> {
      *
      * @param productId 商品ID
      * @param request   请求对象
+     * @return 购物车ID
      */
-    void addCart(Long productId, HttpServletRequest request);
+    long addCart(Long productId, HttpServletRequest request);
 
     /**
      * 删除购物车
@@ -37,4 +38,12 @@ public interface CartService extends IService<Cart> {
      * @return 分页数据
      */
     PageBean<CartVo> pageCartInfos(PageDto pageDto, HttpServletRequest request);
+
+    /**
+     * 购买购物车中的商品
+     *
+     * @param cartId  购物车ID
+     * @param request 请求对象
+     */
+    void purchaseProductByCart(Long cartId, HttpServletRequest request);
 }

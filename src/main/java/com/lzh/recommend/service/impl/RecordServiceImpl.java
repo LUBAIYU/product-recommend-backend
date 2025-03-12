@@ -1,5 +1,6 @@
 package com.lzh.recommend.service.impl;
 
+import cn.hutool.core.collection.CollUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.lzh.recommend.enums.ScoreEnum;
@@ -10,11 +11,14 @@ import com.lzh.recommend.model.vo.UserVo;
 import com.lzh.recommend.service.RecordService;
 import com.lzh.recommend.service.UserService;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.aop.framework.AopContext;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * @author by
@@ -29,31 +33,46 @@ public class RecordServiceImpl extends ServiceImpl<RecordMapper, Record>
 
     @Override
     public void addRecords(List<ProductVo> productVos, HttpServletRequest request) {
-        //获取登录的用户ID
+        // 获取登录的用户ID
         UserVo userVo = userService.getLoginUser(request);
         Long userId = userVo.getId();
-        //添加记录
-        LambdaQueryWrapper<Record> wrapper;
-        for (ProductVo productVo : productVos) {
-            Long productId = productVo.getId();
-            wrapper = new LambdaQueryWrapper<>();
-            wrapper.eq(Record::getProductId, productId);
-            wrapper.eq(Record::getUserId, userId);
-            //根据用户ID和商品ID查询数据
-            Record dbRecord = this.getOne(wrapper);
-            if (dbRecord == null) {
-                //如果记录不存在则插入记录
-                Record record = new Record();
-                record.setUserId(userId);
-                record.setProductId(productId);
-                record.setScore(ScoreEnum.ONE.getScore());
-                this.save(record);
-                continue;
+
+        // 获取代理对象
+        RecordService proxyService = (RecordService) AopContext.currentProxy();
+
+        // 获取商品ID列表
+        List<Long> productIdList = productVos.stream()
+                .map(ProductVo::getId)
+                .collect(Collectors.toList());
+
+        // 获取已经存在的记录列表
+        List<Record> recordList = this.lambdaQuery()
+                .eq(Record::getUserId, userId)
+                .in(Record::getProductId, productIdList)
+                .list();
+
+        // 如果记录存在则对分数加1，不存在则插入记录，并设置分数为1
+        if (CollUtil.isNotEmpty(recordList)) {
+            for (Record record : recordList) {
+                record.setScore(record.getScore() + ScoreEnum.ONE.getScore());
             }
-            //如果记录存在则对count值+1
-            dbRecord.setScore(dbRecord.getScore() + ScoreEnum.ONE.getScore());
-            //更新记录
-            this.updateById(dbRecord);
+            // 批量更新
+            proxyService.updateBatchById(recordList);
+            // 取出记录存在的商品ID列表
+            List<Long> existProductIdList = recordList.stream().map(Record::getProductId)
+                    .collect(Collectors.toList());
+            // 取出记录不存在的商品ID列表
+            List<Long> notExistProductIdList = productIdList.stream()
+                    .filter(productId -> !existProductIdList.contains(productId))
+                    .collect(Collectors.toList());
+
+            if (CollUtil.isNotEmpty(notExistProductIdList)) {
+                // 批量插入不存在的记录
+                batchInsertRecords(new ArrayList<>(), notExistProductIdList, userId, proxyService);
+            }
+        } else {
+            // 批量插入所有记录
+            batchInsertRecords(new ArrayList<>(), productIdList, userId, proxyService);
         }
     }
 
@@ -77,6 +96,26 @@ public class RecordServiceImpl extends ServiceImpl<RecordMapper, Record>
         //记录存在则更新分数，分数加2
         dbRecord.setScore(dbRecord.getScore() + ScoreEnum.TWO.getScore());
         this.updateById(dbRecord);
+    }
+
+    /**
+     * 批量插入记录列表
+     *
+     * @param recordList    记录列表
+     * @param productIdList 商品ID列表
+     * @param userId        用户ID
+     * @param recordService 代理对象
+     */
+    private void batchInsertRecords(List<Record> recordList, List<Long> productIdList, Long userId, RecordService recordService) {
+        for (Long productId : productIdList) {
+            Record record = new Record();
+            record.setUserId(userId);
+            record.setProductId(productId);
+            record.setScore(ScoreEnum.ONE.getScore());
+            recordList.add(record);
+        }
+        // 批量插入
+        recordService.saveBatch(recordList);
     }
 }
 

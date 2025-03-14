@@ -1,6 +1,5 @@
 package com.lzh.recommend.controller;
 
-import cn.hutool.core.bean.BeanUtil;
 import com.lzh.recommend.annotation.LoginCheck;
 import com.lzh.recommend.annotation.MustAdmin;
 import com.lzh.recommend.enums.ErrorCode;
@@ -65,12 +64,11 @@ public class ProductController {
 
     @GetMapping("/get/vo/{id}")
     @LoginCheck
-    public Result<ProductVo> getProductVoById(@PathVariable Long id) {
+    public Result<ProductVo> getProductVoById(@PathVariable Long id, HttpServletRequest request) {
         if (id == null || id <= 0) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
-        Product product = productService.getById(id);
-        ProductVo productVo = BeanUtil.copyProperties(product, ProductVo.class);
+        ProductVo productVo = productService.getProductVoById(id, request);
         return Result.success(productVo);
     }
 
@@ -128,7 +126,7 @@ public class ProductController {
     @PostMapping("/recommend")
     @LoginCheck
     public Result<List<ProductVo>> recommendProducts(Integer count, HttpServletRequest request) {
-        if (count == null || count < 0 || request == null) {
+        if (count == null || count < 0) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
         List<ProductVo> productVos = productService.recommend(count, request);

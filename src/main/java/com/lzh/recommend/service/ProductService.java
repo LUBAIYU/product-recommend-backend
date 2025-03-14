@@ -86,6 +86,14 @@ public interface ProductService extends IService<Product> {
     void purchaseProduct(Long productId, HttpServletRequest request);
 
     /**
+     * 热门商品推荐
+     *
+     * @param count 推荐条数
+     * @return 商品列表
+     */
+    List<ProductVo> recommendHotProducts(Integer count);
+
+    /**
      * 随机获取商品
      *
      * @param count 获取数量
@@ -132,4 +140,13 @@ public interface ProductService extends IService<Product> {
      * @return 文件地址
      */
     String uploadImage(MultipartFile multipartFile, HttpServletRequest request);
+
+    /**
+     * 获取商品详情
+     *
+     * @param id      商品ID
+     * @param request 请求对象
+     * @return 商品信息
+     */
+    ProductVo getProductVoById(Long id, HttpServletRequest request);
 }

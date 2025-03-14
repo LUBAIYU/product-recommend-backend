@@ -6,7 +6,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.lzh.recommend.constant.CommonConsts;
 import com.lzh.recommend.enums.ErrorCode;
-import com.lzh.recommend.enums.ScoreEnum;
+import com.lzh.recommend.enums.OpTypeEnum;
 import com.lzh.recommend.exception.BusinessException;
 import com.lzh.recommend.mapper.CartMapper;
 import com.lzh.recommend.model.dto.PageDto;
@@ -15,10 +15,7 @@ import com.lzh.recommend.model.entity.Product;
 import com.lzh.recommend.model.entity.Record;
 import com.lzh.recommend.model.vo.CartVo;
 import com.lzh.recommend.model.vo.UserVo;
-import com.lzh.recommend.service.CartService;
-import com.lzh.recommend.service.ProductService;
-import com.lzh.recommend.service.RecordService;
-import com.lzh.recommend.service.UserService;
+import com.lzh.recommend.service.*;
 import com.lzh.recommend.utils.PageBean;
 import com.lzh.recommend.utils.ThrowUtils;
 import lombok.extern.slf4j.Slf4j;
@@ -50,6 +47,8 @@ public class CartServiceImpl extends ServiceImpl<CartMapper, Cart>
     private RecordService recordService;
     @Resource
     private ProductService productService;
+    @Resource
+    private SaleRecordService saleRecordService;
 
     private final Lock lock = new ReentrantLock();
 
@@ -83,7 +82,7 @@ public class CartServiceImpl extends ServiceImpl<CartMapper, Cart>
             this.updateById(dbCart);
         }
         //更新记录表，增加积分，作为推荐算法数据源
-        recordService.addScores(productId, userId);
+        recordService.saveOrUpdate(userId, productId, OpTypeEnum.ADD_CART);
         return 0L;
     }
 
@@ -118,7 +117,7 @@ public class CartServiceImpl extends ServiceImpl<CartMapper, Cart>
         if (record == null) {
             throw new BusinessException(ErrorCode.NOT_FOUND_ERROR);
         }
-        int newScore = record.getScore() - ScoreEnum.TWO.getScore();
+        int newScore = record.getScore() - OpTypeEnum.ADD_CART.getScore();
         //进行扣分
         record.setScore(newScore);
         //更新分数
@@ -216,19 +215,15 @@ public class CartServiceImpl extends ServiceImpl<CartMapper, Cart>
             productService.updateById(product);
             //删除购物车
             this.removeById(cartId);
+            // 更新商品销售记录
+            saleRecordService.saveOrUpdate(cart.getProductId(), cart.getNum());
         } finally {
             // 解锁
             lock.unlock();
         }
 
-        // 给对应记录添加分数，值为3
-        Record record = recordService.lambdaQuery()
-                .eq(Record::getUserId, loginUserId)
-                .eq(Record::getProductId, cart.getProductId())
-                .one();
-        ThrowUtils.throwIf(record == null, ErrorCode.NOT_FOUND_ERROR);
-        record.setScore(record.getScore() + ScoreEnum.THREE.getScore());
-        recordService.updateById(record);
+        // 添加或更新记录
+        recordService.saveOrUpdate(loginUserId, cart.getProductId(), OpTypeEnum.PRODUCT_PURCHASE);
     }
 }
 

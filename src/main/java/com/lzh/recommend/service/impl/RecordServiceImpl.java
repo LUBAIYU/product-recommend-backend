@@ -1,15 +1,17 @@
 package com.lzh.recommend.service.impl;
 
 import cn.hutool.core.collection.CollUtil;
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import cn.hutool.core.util.ObjectUtil;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import com.lzh.recommend.enums.ScoreEnum;
+import com.lzh.recommend.enums.ErrorCode;
+import com.lzh.recommend.enums.OpTypeEnum;
 import com.lzh.recommend.mapper.RecordMapper;
 import com.lzh.recommend.model.entity.Record;
 import com.lzh.recommend.model.vo.ProductVo;
 import com.lzh.recommend.model.vo.UserVo;
 import com.lzh.recommend.service.RecordService;
 import com.lzh.recommend.service.UserService;
+import com.lzh.recommend.utils.ThrowUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.aop.framework.AopContext;
 import org.springframework.stereotype.Service;
@@ -17,6 +19,7 @@ import org.springframework.stereotype.Service;
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -54,7 +57,8 @@ public class RecordServiceImpl extends ServiceImpl<RecordMapper, Record>
         // 如果记录存在则对分数加1，不存在则插入记录，并设置分数为1
         if (CollUtil.isNotEmpty(recordList)) {
             for (Record record : recordList) {
-                record.setScore(record.getScore() + ScoreEnum.ONE.getScore());
+                record.setScore(record.getScore() + OpTypeEnum.PRODUCT_SEARCH.getScore());
+                record.setUpdateTime(new Date());
             }
             // 批量更新
             proxyService.updateBatchById(recordList);
@@ -77,25 +81,27 @@ public class RecordServiceImpl extends ServiceImpl<RecordMapper, Record>
     }
 
     @Override
-    public void addScores(Long productId, Long userId) {
-        //查询记录是否存在
-        LambdaQueryWrapper<Record> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(Record::getUserId, userId);
-        wrapper.eq(Record::getProductId, productId);
-        Record dbRecord = this.getOne(wrapper);
-        //如果记录为空则插入记录
-        if (dbRecord == null) {
-            Record record = new Record();
+    public void saveOrUpdate(Long userId, Long productId, OpTypeEnum opTypeEnum) {
+        // 判断记录是否存在
+        Record record = this.lambdaQuery()
+                .eq(Record::getUserId, userId)
+                .eq(Record::getProductId, productId)
+                .one();
+        // 插入记录
+        if (ObjectUtil.isEmpty(record)) {
+            record = new Record();
             record.setUserId(userId);
             record.setProductId(productId);
-            record.setScore(ScoreEnum.TWO.getScore());
-            //插入记录
-            this.save(record);
+            record.setScore(opTypeEnum.getScore());
+            boolean saved = this.save(record);
+            ThrowUtils.throwIf(!saved, ErrorCode.SYSTEM_ERROR, "保存记录失败");
             return;
         }
-        //记录存在则更新分数，分数加2
-        dbRecord.setScore(dbRecord.getScore() + ScoreEnum.TWO.getScore());
-        this.updateById(dbRecord);
+        // 更新记录
+        record.setScore(record.getScore() + opTypeEnum.getScore());
+        record.setUpdateTime(new Date());
+        boolean updated = this.updateById(record);
+        ThrowUtils.throwIf(!updated, ErrorCode.SYSTEM_ERROR, "更新记录失败");
     }
 
     /**
@@ -111,7 +117,7 @@ public class RecordServiceImpl extends ServiceImpl<RecordMapper, Record>
             Record record = new Record();
             record.setUserId(userId);
             record.setProductId(productId);
-            record.setScore(ScoreEnum.ONE.getScore());
+            record.setScore(OpTypeEnum.PRODUCT_SEARCH.getScore());
             recordList.add(record);
         }
         // 批量插入

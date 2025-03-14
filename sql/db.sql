@@ -46,7 +46,8 @@ create table if not exists record
     count       int      default 1                 not null comment '搜索次数',
     create_time datetime default (now())           not null comment '创建时间',
     update_time datetime default CURRENT_TIMESTAMP not null on update CURRENT_TIMESTAMP comment '更新时间',
-    is_deleted  tinyint  default 0                 not null comment '是否删除（0-存在，1-删除）'
+    is_deleted  tinyint  default 0                 not null comment '是否删除（0-存在，1-删除）',
+    UNIQUE KEY uk_userId_productId (user_id, product_id) # 唯一联合索引
 ) comment '记录表' collate = utf8mb4_unicode_ci;
 
 # 购物车信息表
@@ -61,3 +62,16 @@ create table if not exists cart
     update_time datetime default CURRENT_TIMESTAMP not null on update CURRENT_TIMESTAMP comment '更新时间',
     is_deleted  tinyint  default 0                 not null comment '是否删除（0-未删除，1-删除）'
 ) comment '购物车信息表' collate = utf8mb4_unicode_ci;
+
+# 商品销售记录表
+create table if not exists sale_record
+(
+    id          bigint auto_increment comment '主键ID'
+        primary key,
+    product_id  bigint                             not null comment '商品ID',
+    sale_num    int                                not null comment '销售数量',
+    create_time datetime default CURRENT_TIMESTAMP not null comment '创建时间',
+    update_time datetime default CURRENT_TIMESTAMP not null on update CURRENT_TIMESTAMP comment '更新时间',
+    is_deleted  tinyint  default 0                 not null comment '是否删除（0-未删除，1-删除）',
+    UNIQUE KEY uk_productId (product_id) # 商品ID唯一
+) comment '商品销售记录表' collate = utf8mb4_unicode_ci;

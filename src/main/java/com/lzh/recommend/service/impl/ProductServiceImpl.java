@@ -1,6 +1,7 @@
 package com.lzh.recommend.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
+import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -8,8 +9,8 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.lzh.recommend.constant.CommonConsts;
 import com.lzh.recommend.constant.ProductConsts;
 import com.lzh.recommend.enums.ErrorCode;
+import com.lzh.recommend.enums.OpTypeEnum;
 import com.lzh.recommend.enums.ProductStatusEnum;
-import com.lzh.recommend.enums.ScoreEnum;
 import com.lzh.recommend.exception.BusinessException;
 import com.lzh.recommend.manager.FileManager;
 import com.lzh.recommend.mapper.ProductMapper;
@@ -20,14 +21,17 @@ import com.lzh.recommend.model.dto.ProductUpdateDto;
 import com.lzh.recommend.model.dto.SearchProductDto;
 import com.lzh.recommend.model.entity.Product;
 import com.lzh.recommend.model.entity.Record;
+import com.lzh.recommend.model.entity.SaleRecord;
 import com.lzh.recommend.model.vo.ProductVo;
 import com.lzh.recommend.model.vo.UserVo;
-import com.lzh.recommend.service.CartService;
 import com.lzh.recommend.service.ProductService;
 import com.lzh.recommend.service.RecordService;
+import com.lzh.recommend.service.SaleRecordService;
 import com.lzh.recommend.service.UserService;
 import com.lzh.recommend.utils.PageBean;
 import com.lzh.recommend.utils.ThrowUtils;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -35,7 +39,6 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.CollectionUtils;
 import org.springframework.web.multipart.MultipartFile;
 
-import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
 import java.util.*;
 import java.util.concurrent.locks.Lock;
@@ -45,22 +48,18 @@ import java.util.stream.Collectors;
 /**
  * @author by
  */
+@Slf4j
 @Service
+@RequiredArgsConstructor
 public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product>
         implements ProductService {
 
-    @Resource
-    private UserService userService;
-    @Resource
-    private RecordService recordService;
-    @Resource
-    private CartService cartService;
-    @Resource
-    private ProductMapper productMapper;
-    @Resource
-    private RecordMapper recordMapper;
-    @Resource
-    private FileManager fileManager;
+    private final UserService userService;
+    private final RecordService recordService;
+    private final ProductMapper productMapper;
+    private final RecordMapper recordMapper;
+    private final FileManager fileManager;
+    private final SaleRecordService saleRecordService;
 
     @Value("${product.recommend.path.product-image-prefix}")
     private String productImagePrefix;
@@ -241,22 +240,30 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product>
 
     @Override
     public List<ProductVo> recommend(Integer count, HttpServletRequest request) {
-        //获取当前登录用户ID
+        // 获取记录
+        long total = recordService.count();
+        if (total <= 0) {
+            // 如果无记录，则随机推荐
+            return randomProducts(count);
+        }
+
+        // 获取当前登录用户ID
         UserVo userVo = userService.getLoginUser(request);
         Long loginUserId = userVo.getId();
-        //根据用户ID去查询记录表
-        LambdaQueryWrapper<Record> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(Record::getUserId, loginUserId);
-        long loginUserCount = recordService.count(wrapper);
-        wrapper = new LambdaQueryWrapper<>();
-        wrapper.ne(Record::getUserId, loginUserId);
-        long otherUserCount = recordService.count(wrapper);
-        //当记录表中无记录，或者登录用户不存在记录，或者其他用户不存在记录时，则随机推荐
-        if (loginUserCount == 0 || otherUserCount == 0) {
-            return this.randomProducts(count);
+
+        // 根据用户ID去查询记录表
+        // 获取用户记录
+        Long loginUserCount = recordService.lambdaQuery()
+                .eq(Record::getUserId, loginUserId)
+                .count();
+
+        //如果登录用户不存在记录或者只有当前用户的记录，则推荐热门商品
+        if (loginUserCount == 0 || loginUserCount == total) {
+            return recommendHotProducts(count);
         }
+
         //当登录用户和其他用户都存在记录时，则利用用户协同过滤算法进行推荐
-        return this.collaborativeFiltering(loginUserId, count);
+        return collaborativeFiltering(loginUserId, count);
     }
 
     @Override
@@ -281,28 +288,52 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product>
             // 更新库存
             product.setStock(stock - 1);
             this.updateById(product);
+            // 更新商品销售记录
+            saleRecordService.saveOrUpdate(productId, 1);
         } finally {
             // 解锁
             lock.unlock();
         }
 
-        // 判断记录是否存在
-        Record record = recordService.lambdaQuery()
-                .eq(Record::getUserId, loginUserId)
-                .eq(Record::getProductId, productId)
-                .one();
-        // 如果存在则更新分数
-        if (record != null) {
-            record.setScore(record.getScore() + ScoreEnum.TWO.getScore());
-            recordService.updateById(record);
-        } else {
-            // 不存在，则插入记录
-            record = new Record();
-            record.setProductId(productId);
-            record.setUserId(loginUserId);
-            record.setScore(ScoreEnum.TWO.getScore());
-            recordService.save(record);
+        // 添加或更新记录
+        recordService.saveOrUpdate(loginUserId, productId, OpTypeEnum.PRODUCT_PURCHASE);
+    }
+
+    @Override
+    public List<ProductVo> recommendHotProducts(Integer count) {
+        // 取出所有商品的销售记录
+        List<SaleRecord> saleRecordList = saleRecordService.list();
+        if (CollUtil.isEmpty(saleRecordList)) {
+            // 随机取出
+            return randomProducts(count);
         }
+
+        // 对所有记录根据销售量进行降序排序
+        List<Long> productIdList = saleRecordList.stream()
+                .sorted(Comparator.comparing(SaleRecord::getSaleNum).reversed())
+                .map(SaleRecord::getProductId)
+                .limit(count)
+                .collect(Collectors.toList());
+
+        // 取出商品列表，然后对列表按照商品ID列表的顺序进行排序
+        List<Product> productList = this.lambdaQuery()
+                .in(Product::getId, productIdList)
+                .list();
+        if (CollUtil.isEmpty(productList)) {
+            // 随机取出
+            return randomProducts(count);
+        }
+        // 传入的ID列表是3,1,2，出来的结果是3,1,2对应的商品，保持统一顺序
+        List<Product> sortedProductList = productList.stream()
+                .sorted(Comparator.comparingLong(
+                        product -> productIdList.indexOf(product.getId()))
+                )
+                .collect(Collectors.toList());
+
+        // 脱敏返回
+        return sortedProductList.stream()
+                .map(product -> BeanUtil.copyProperties(product, ProductVo.class))
+                .collect(Collectors.toList());
     }
 
     @Override
@@ -312,18 +343,14 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product>
         }
         //从商品数据表中随机取出count条数据
         List<Product> productList = productMapper.randomProducts(count);
-        //商品数据脱敏
-        List<ProductVo> productVos = new ArrayList<>();
         //如果为空直接返回
         if (CollectionUtils.isEmpty(productList)) {
-            return productVos;
+            return Collections.emptyList();
         }
-        productVos = productList.stream().map(product -> {
-            ProductVo productVo = new ProductVo();
-            BeanUtil.copyProperties(product, productVo);
-            return productVo;
-        }).collect(Collectors.toList());
-        return productVos;
+        // 返回脱敏数据
+        return productList.stream()
+                .map(product -> BeanUtil.copyProperties(product, ProductVo.class))
+                .collect(Collectors.toList());
     }
 
     @Override
@@ -331,18 +358,23 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product>
         //用于保存用户相似度的Map
         Map<Long, Double> similarityMap = new HashMap<>((int) userService.count() - 1);
         //根据用户ID进行分组，每组的值是一个商品ID集合
-        Map<Long, Set<Long>> userIdProductIdsMap = recordService.list().stream().collect(Collectors.groupingBy(Record::getUserId, Collectors.mapping(Record::getProductId, Collectors.toSet())));
+        Map<Long, Set<Long>> userIdProductIdsMap = recordService.list()
+                .stream()
+                .collect(Collectors.groupingBy(
+                        Record::getUserId,
+                        Collectors.mapping(Record::getProductId, Collectors.toSet())
+                ));
         //获取登录用户商品ID集合
         Set<Long> loginUserProductIdSet = userIdProductIdsMap.get(loginUserId);
         //计算相似度，获取相似度集合
-        this.getSimilarityMap(loginUserId, userIdProductIdsMap, loginUserProductIdSet, similarityMap);
+        getSimilarityMap(loginUserId, userIdProductIdsMap, loginUserProductIdSet, similarityMap);
         //对相似度集合根据相似度进行倒序排序
         similarityMap = similarityMap.entrySet().stream().sorted(Map.Entry.comparingByValue(Comparator.reverseOrder())).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (oldValue, newValue) -> oldValue, LinkedHashMap::new));
-        //如果相似度最高的用户的相似度为0，则随机推荐
+        //如果相似度最高的用户的相似度为0，则推荐热门商品
         for (Map.Entry<Long, Double> entry : similarityMap.entrySet()) {
             Double similarity = similarityMap.get(entry.getKey());
             if (similarity == 0) {
-                return this.randomProducts(count);
+                return recommendHotProducts(count);
             }
             break;
         }
@@ -372,9 +404,9 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product>
         }
         //求出商品交集中登录用户未打分的商品集合
         commonProductSet.removeIf(loginUserProductIdSet::contains);
-        //如果集合为空，则随机推荐
+        //如果集合为空，则推荐热门商品
         if (commonProductSet.isEmpty()) {
-            return this.randomProducts(count);
+            return recommendHotProducts(count);
         }
         //利用基于评分差值进行加权的方法对登录用户未打分的商品进行分数预测
         //计算登录用户的商品基础分，即商品平均分
@@ -383,11 +415,10 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product>
         //计算未打分商品集合中每个商品的预测分数
         Map<Long, Double> finalScoreMap = new HashMap<>(commonProductSet.size());
         //计算最终预测分数
-        this.getFinalScoreMap(commonProductSet, similarityMap, userIdProductIdsMap, loginUserAvgScore, finalScoreMap, similaritySum);
+        getFinalScoreMap(commonProductSet, similarityMap, userIdProductIdsMap, loginUserAvgScore, finalScoreMap, similaritySum);
         //对最终地预测分数集合进行一次倒序排序
         finalScoreMap = finalScoreMap.entrySet().stream().sorted(Map.Entry.comparingByValue(Comparator.reverseOrder())).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (oldValue, newValue) -> oldValue, LinkedHashMap::new));
         //遍历集合，取前count个商品，如果数量小于count，则取全部
-        List<ProductVo> productVoList;
         List<Product> productList = new ArrayList<>();
         int newCount = 0;
         for (Map.Entry<Long, Double> entry : finalScoreMap.entrySet()) {
@@ -398,12 +429,11 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product>
             }
         }
         //数据脱敏，返回最终商品数据
-        productVoList = productList.stream().map(product -> {
+        return productList.stream().map(product -> {
             ProductVo productVo = new ProductVo();
             BeanUtil.copyProperties(product, productVo);
             return productVo;
         }).collect(Collectors.toList());
-        return productVoList;
     }
 
     @Override
@@ -462,6 +492,22 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product>
         String uploadImagePrefix = String.format("%s/%s", productImagePrefix, loginUser.getId());
         // 上传图片
         return fileManager.uploadFile(multipartFile, uploadImagePrefix);
+    }
+
+    @Override
+    public ProductVo getProductVoById(Long id, HttpServletRequest request) {
+        // 获取数据
+        Product product = this.getById(id);
+        if (product == null) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
+        // 获取登录用户ID
+        UserVo loginUser = userService.getLoginUser(request);
+        Long loginUserId = loginUser.getId();
+        // 添加或更新记录
+        recordService.saveOrUpdate(loginUserId, id, OpTypeEnum.PRODUCT_DETAIL);
+        // 返回数据
+        return BeanUtil.copyProperties(product, ProductVo.class);
     }
 }
 

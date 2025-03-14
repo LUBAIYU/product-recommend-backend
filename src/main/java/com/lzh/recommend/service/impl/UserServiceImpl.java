@@ -148,7 +148,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
     }
 
     @Override
-    public void updateInfo(UserUpdateDto userUpdateDto) {
+    public void updateInfo(UserUpdateDto userUpdateDto, HttpServletRequest request) {
         //获取请求参数
         Long id = userUpdateDto.getId();
         String userAccount = userUpdateDto.getUserAccount();
@@ -193,6 +193,15 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         wrapper.set(User::getPhone, phone);
         //执行更新操作
         this.update(wrapper);
+
+        // 如果登录用户更新了自己的信息，则更新用户登录态
+        UserVo loginUser = this.getLoginUser(request);
+        Long loginUserId = loginUser.getId();
+        if (loginUserId.equals(id)) {
+            User user = this.getById(id);
+            UserVo userVo = BeanUtil.copyProperties(user, UserVo.class);
+            request.getSession().setAttribute(UserConsts.USER_LOGIN_STATE, userVo);
+        }
     }
 
     @Override

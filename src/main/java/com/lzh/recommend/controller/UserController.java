@@ -80,11 +80,11 @@ public class UserController {
 
     @PutMapping("/update")
     @LoginCheck
-    public Result<Boolean> updateUserInfo(@RequestBody UserUpdateDto userUpdateDto) {
+    public Result<Boolean> updateUserInfo(@RequestBody UserUpdateDto userUpdateDto, HttpServletRequest request) {
         if (userUpdateDto == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
-        userService.updateInfo(userUpdateDto);
+        userService.updateInfo(userUpdateDto, request);
         return Result.success(true);
     }
 

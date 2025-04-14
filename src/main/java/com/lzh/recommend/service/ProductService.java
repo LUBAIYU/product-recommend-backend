@@ -1,10 +1,7 @@
 package com.lzh.recommend.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
-import com.lzh.recommend.model.dto.PageProductDto;
-import com.lzh.recommend.model.dto.ProductAddDto;
-import com.lzh.recommend.model.dto.ProductUpdateDto;
-import com.lzh.recommend.model.dto.SearchProductDto;
+import com.lzh.recommend.model.dto.*;
 import com.lzh.recommend.model.entity.Product;
 import com.lzh.recommend.model.vo.ProductVo;
 import com.lzh.recommend.utils.PageBean;
@@ -149,4 +146,12 @@ public interface ProductService extends IService<Product> {
      * @return 商品信息
      */
     ProductVo getProductVoById(Long id, HttpServletRequest request);
+
+    /**
+     * 批量添加商品
+     *
+     * @param productFetchDto 请求体
+     * @param request         请求对象
+     */
+    void addProductByBatch(ProductFetchDto productFetchDto, HttpServletRequest request);
 }

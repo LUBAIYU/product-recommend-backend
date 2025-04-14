@@ -13,7 +13,6 @@ import com.lzh.recommend.constant.UserConsts;
 import com.lzh.recommend.enums.ErrorCode;
 import com.lzh.recommend.enums.RoleEnum;
 import com.lzh.recommend.exception.BusinessException;
-import com.lzh.recommend.manager.FileManager;
 import com.lzh.recommend.mapper.UserMapper;
 import com.lzh.recommend.model.dto.LoginDto;
 import com.lzh.recommend.model.dto.PageUserDto;
@@ -22,6 +21,7 @@ import com.lzh.recommend.model.dto.UserUpdateDto;
 import com.lzh.recommend.model.entity.User;
 import com.lzh.recommend.model.vo.UserVo;
 import com.lzh.recommend.service.UserService;
+import com.lzh.recommend.upload.FilePictureUpload;
 import com.lzh.recommend.utils.PageBean;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -44,7 +44,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
     private String userAvatarPrefix;
 
     @Resource
-    private FileManager fileManager;
+    private FilePictureUpload filePictureUpload;
 
     @Override
     public UserVo login(LoginDto loginDto, HttpServletRequest request) {
@@ -144,7 +144,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         // 构造图片路径前缀
         String uploadPathPrefix = String.format("%s/%s", userAvatarPrefix, loginUser.getId());
         // 上传图片
-        return fileManager.uploadFile(multipartFile, uploadPathPrefix);
+        return filePictureUpload.uploadPicture(multipartFile, uploadPathPrefix);
     }
 
     @Override

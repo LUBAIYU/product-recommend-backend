@@ -43,7 +43,7 @@ create table if not exists record
         primary key,
     user_id     bigint                             not null comment '用户ID',
     product_id  bigint                             not null comment '商品ID',
-    count       int      default 1                 not null comment '搜索次数',
+    score       int      default 1                 not null comment '根据分数给用户推荐商品',
     create_time datetime default (now())           not null comment '创建时间',
     update_time datetime default CURRENT_TIMESTAMP not null on update CURRENT_TIMESTAMP comment '更新时间',
     is_deleted  tinyint  default 0                 not null comment '是否删除（0-存在，1-删除）',

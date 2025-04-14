@@ -1,27 +1,26 @@
-package com.lzh.recommend.manager;
+package com.lzh.recommend.upload;
 
 import cn.hutool.core.date.DateUtil;
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.RandomUtil;
 import com.lzh.recommend.config.CosClientConfig;
-import com.lzh.recommend.constant.PictureConsts;
 import com.lzh.recommend.enums.ErrorCode;
 import com.lzh.recommend.exception.BusinessException;
-import com.lzh.recommend.utils.ThrowUtils;
+import com.lzh.recommend.manager.CosManager;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
-import org.springframework.web.multipart.MultipartFile;
 
 import javax.annotation.Resource;
 import java.io.File;
+import java.io.IOException;
 import java.util.Date;
 
 /**
+ * 图片上传模版类
+ *
  * @author lzh
  */
 @Slf4j
-@Service
-public class FileManager {
+public abstract class BasePictureUploadTemplate {
 
     @Resource
     private CosClientConfig clientConfig;
@@ -30,20 +29,20 @@ public class FileManager {
     private CosManager cosManager;
 
     /**
-     * 上传头像
+     * 上传图片
      *
-     * @param multipartFile    文件
-     * @param uploadPathPrefix 路径前缀
-     * @return 头像地址
+     * @param inputSource      输入源
+     * @param uploadPathPrefix 上传路径前缀
+     * @return 图片地址
      */
-    public String uploadFile(MultipartFile multipartFile, String uploadPathPrefix) {
+    public String uploadPicture(Object inputSource, String uploadPathPrefix) {
         // 校验文件
-        validateFile(multipartFile);
+        validateFile(inputSource);
 
         // 重新拼接图片路径，不使用原始的文件名，避免重复和增加安全性
         String uuid = RandomUtil.randomString(16);
         String date = DateUtil.formatDate(new Date());
-        String filename = multipartFile.getOriginalFilename();
+        String filename = getOriginalFilename(inputSource);
         String uploadFileName = String.format("%s_%s.%s", date, uuid, FileUtil.getSuffix(filename));
         String uploadPath = String.format("/%s/%s", uploadPathPrefix, uploadFileName);
 
@@ -52,7 +51,7 @@ public class FileManager {
         try {
             // 上传文件
             tempFile = File.createTempFile(uploadPath, null);
-            multipartFile.transferTo(tempFile);
+            transferFile(inputSource, tempFile);
             cosManager.putObject(uploadPath, tempFile);
 
             // 返回图片地址
@@ -66,18 +65,6 @@ public class FileManager {
             this.deleteTempFile(tempFile);
         }
     }
-
-    private void validateFile(MultipartFile multipartFile) {
-        ThrowUtils.throwIf(multipartFile == null, ErrorCode.PARAMS_ERROR, "文件不能为空");
-        // 校验大小(限制最大为 10MB)
-        long fileSize = multipartFile.getSize();
-        ThrowUtils.throwIf(fileSize > PictureConsts.MAX_FILE_SIZE, ErrorCode.PARAMS_ERROR, "文件大小不能超过 10MB");
-        // 校验后缀
-        String filename = multipartFile.getOriginalFilename();
-        String suffix = FileUtil.getSuffix(filename);
-        ThrowUtils.throwIf(!PictureConsts.ALLOW_SUFFIX_LIST.contains(suffix), ErrorCode.PARAMS_ERROR, "文件格式不支持");
-    }
-
 
     /**
      * 删除临时文件
@@ -93,4 +80,28 @@ public class FileManager {
             log.error("file delete error, filePath = {}", file.getAbsolutePath());
         }
     }
+
+    /**
+     * 校验文件
+     *
+     * @param inputSource 输入源
+     */
+    protected abstract void validateFile(Object inputSource);
+
+    /**
+     * 获取原始文件名
+     *
+     * @param inputSource 输入源
+     * @return 原始文件名
+     */
+    protected abstract String getOriginalFilename(Object inputSource);
+
+    /**
+     * 将输入源中的文件保存到临时文件中
+     *
+     * @param inputSource 输入源
+     * @param file        临时文件
+     * @throws IOException IO异常
+     */
+    protected abstract void transferFile(Object inputSource, File file) throws IOException;
 }

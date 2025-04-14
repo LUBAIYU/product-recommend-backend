@@ -2,8 +2,10 @@ package com.lzh.recommend.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.util.ObjectUtil;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.lzh.recommend.constant.CommonConsts;
@@ -12,13 +14,9 @@ import com.lzh.recommend.enums.ErrorCode;
 import com.lzh.recommend.enums.OpTypeEnum;
 import com.lzh.recommend.enums.ProductStatusEnum;
 import com.lzh.recommend.exception.BusinessException;
-import com.lzh.recommend.manager.FileManager;
 import com.lzh.recommend.mapper.ProductMapper;
 import com.lzh.recommend.mapper.RecordMapper;
-import com.lzh.recommend.model.dto.PageProductDto;
-import com.lzh.recommend.model.dto.ProductAddDto;
-import com.lzh.recommend.model.dto.ProductUpdateDto;
-import com.lzh.recommend.model.dto.SearchProductDto;
+import com.lzh.recommend.model.dto.*;
 import com.lzh.recommend.model.entity.Product;
 import com.lzh.recommend.model.entity.Record;
 import com.lzh.recommend.model.entity.SaleRecord;
@@ -28,11 +26,18 @@ import com.lzh.recommend.service.ProductService;
 import com.lzh.recommend.service.RecordService;
 import com.lzh.recommend.service.SaleRecordService;
 import com.lzh.recommend.service.UserService;
+import com.lzh.recommend.upload.FilePictureUpload;
+import com.lzh.recommend.upload.UrlPictureUpload;
 import com.lzh.recommend.utils.PageBean;
 import com.lzh.recommend.utils.ThrowUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.select.Elements;
+import org.springframework.aop.framework.AopContext;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,6 +45,7 @@ import org.springframework.util.CollectionUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.servlet.http.HttpServletRequest;
+import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -58,11 +64,17 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product>
     private final RecordService recordService;
     private final ProductMapper productMapper;
     private final RecordMapper recordMapper;
-    private final FileManager fileManager;
+    private final FilePictureUpload filePictureUpload;
+    private final UrlPictureUpload urlPictureUpload;
     private final SaleRecordService saleRecordService;
 
     @Value("${product.recommend.path.product-image-prefix}")
     private String productImagePrefix;
+
+    /**
+     * 协同过滤算法的N值，即取前N个最相似用户进行推荐
+     */
+    private final int N = 10;
 
     private final Lock lock = new ReentrantLock();
 
@@ -165,6 +177,7 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product>
         wrapper.eq(id != null, Product::getId, id);
         wrapper.like(StrUtil.isNotBlank(name), Product::getName, name);
         wrapper.eq(status != null, Product::getStatus, status);
+        wrapper.orderByDesc(Product::getCreateTime);
         //查询
         this.page(page, wrapper);
         //返回记录
@@ -355,22 +368,33 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product>
 
     @Override
     public List<ProductVo> collaborativeFiltering(Long loginUserId, Integer count) {
-        //用于保存用户相似度的Map
-        Map<Long, Double> similarityMap = new HashMap<>((int) userService.count() - 1);
-        //根据用户ID进行分组，每组的值是一个商品ID集合
-        Map<Long, Set<Long>> userIdProductIdsMap = recordService.list()
-                .stream()
-                .collect(Collectors.groupingBy(
-                        Record::getUserId,
-                        Collectors.mapping(Record::getProductId, Collectors.toSet())
-                ));
-        //获取登录用户商品ID集合
+        // 根据用户ID进行分组，每组的值是一个商品ID集合
+        QueryWrapper<Record> queryWrapper = new QueryWrapper<>();
+        queryWrapper.select("user_id", "product_id");
+        List<Record> recordList = recordService.getBaseMapper().selectObjs(queryWrapper);
+        Map<Long, Set<Long>> userIdProductIdsMap = recordList.stream()
+                .collect(Collectors.groupingBy(Record::getUserId,
+                        Collectors.mapping(Record::getProductId, Collectors.toSet())));
+
+        // 获取登录用户商品ID集合
         Set<Long> loginUserProductIdSet = userIdProductIdsMap.get(loginUserId);
-        //计算相似度，获取相似度集合
+
+        // 用于保存用户相似度的Map
+        Map<Long, Double> similarityMap = new HashMap<>(((int) userService.count() - 1) << 1);
+        // 计算相似度，获取相似度集合
         getSimilarityMap(loginUserId, userIdProductIdsMap, loginUserProductIdSet, similarityMap);
-        //对相似度集合根据相似度进行倒序排序
-        similarityMap = similarityMap.entrySet().stream().sorted(Map.Entry.comparingByValue(Comparator.reverseOrder())).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (oldValue, newValue) -> oldValue, LinkedHashMap::new));
-        //如果相似度最高的用户的相似度为0，则推荐热门商品
+
+        // 对相似度集合根据相似度进行倒序排序
+        similarityMap = similarityMap.entrySet()
+                .stream()
+                .sorted(Map.Entry.comparingByValue(Comparator.reverseOrder()))
+                .collect(Collectors.toMap(
+                        Map.Entry::getKey,
+                        Map.Entry::getValue,
+                        (oldValue, newValue) -> oldValue, LinkedHashMap::new)
+                );
+
+        // 如果相似度最高的用户的相似度为0，则推荐热门商品
         for (Map.Entry<Long, Double> entry : similarityMap.entrySet()) {
             Double similarity = similarityMap.get(entry.getKey());
             if (similarity == 0) {
@@ -378,18 +402,18 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product>
             }
             break;
         }
-        //取前三分之一的用户
+        // 取前n个最相似用户
         int num = 0;
-        //用于保存相似用户列表的共同打分商品的集合
+        // 用于保存相似用户列表的共同打分商品的集合
         Set<Long> commonProductSet = new HashSet<>();
-        //用于保存前三分之一的用户的相似度之和
+        // 用于保存前n个用户的相似度之和
         double similaritySum = 0;
         for (Map.Entry<Long, Double> entry : similarityMap.entrySet()) {
-            //获取用户ID
+            // 获取用户ID
             Long userId = entry.getKey();
-            //计算相似度之和
+            // 计算相似度之和
             similaritySum += entry.getValue();
-            //获取用户ID对应的商品ID集合
+            // 获取用户ID对应的商品ID集合
             Set<Long> productIds = userIdProductIdsMap.get(userId);
             if (num == 0) {
                 commonProductSet = new HashSet<>(productIds);
@@ -398,27 +422,27 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product>
                 commonProductSet.retainAll(productIds);
             }
             num++;
-            if (num > similarityMap.size() / 3) {
+            if (num >= N) {
                 break;
             }
         }
-        //求出商品交集中登录用户未打分的商品集合
+        // 求出商品交集中登录用户未打分的商品集合
         commonProductSet.removeIf(loginUserProductIdSet::contains);
-        //如果集合为空，则推荐热门商品
+        // 如果集合为空，则推荐热门商品
         if (commonProductSet.isEmpty()) {
             return recommendHotProducts(count);
         }
-        //利用基于评分差值进行加权的方法对登录用户未打分的商品进行分数预测
-        //计算登录用户的商品基础分，即商品平均分
+        // 利用基于评分差值进行加权的方法对登录用户未打分的商品进行分数预测
+        // 计算登录用户的商品基础分，即商品平均分
         double sumScore = recordMapper.sumScore(loginUserId);
         double loginUserAvgScore = sumScore / loginUserProductIdSet.size();
-        //计算未打分商品集合中每个商品的预测分数
+        // 计算未打分商品集合中每个商品的预测分数
         Map<Long, Double> finalScoreMap = new HashMap<>(commonProductSet.size());
-        //计算最终预测分数
+        // 计算最终预测分数
         getFinalScoreMap(commonProductSet, similarityMap, userIdProductIdsMap, loginUserAvgScore, finalScoreMap, similaritySum);
-        //对最终地预测分数集合进行一次倒序排序
+        // 对最终地预测分数集合进行一次倒序排序
         finalScoreMap = finalScoreMap.entrySet().stream().sorted(Map.Entry.comparingByValue(Comparator.reverseOrder())).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (oldValue, newValue) -> oldValue, LinkedHashMap::new));
-        //遍历集合，取前count个商品，如果数量小于count，则取全部
+        // 遍历集合，取前count个商品，如果数量小于count，则取全部
         List<Product> productList = new ArrayList<>();
         int newCount = 0;
         for (Map.Entry<Long, Double> entry : finalScoreMap.entrySet()) {
@@ -428,7 +452,7 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product>
                 break;
             }
         }
-        //数据脱敏，返回最终商品数据
+        // 数据脱敏，返回最终商品数据
         return productList.stream().map(product -> {
             ProductVo productVo = new ProductVo();
             BeanUtil.copyProperties(product, productVo);
@@ -491,7 +515,7 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product>
         // 构造地址前缀
         String uploadImagePrefix = String.format("%s/%s", productImagePrefix, loginUser.getId());
         // 上传图片
-        return fileManager.uploadFile(multipartFile, uploadImagePrefix);
+        return filePictureUpload.uploadPicture(multipartFile, uploadImagePrefix);
     }
 
     @Override
@@ -508,6 +532,84 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product>
         recordService.saveOrUpdate(loginUserId, id, OpTypeEnum.PRODUCT_DETAIL);
         // 返回数据
         return BeanUtil.copyProperties(product, ProductVo.class);
+    }
+
+    @Override
+    public void addProductByBatch(ProductFetchDto productFetchDto, HttpServletRequest request) {
+        // 获取参数
+        String searchText = productFetchDto.getSearchText();
+        Integer count = productFetchDto.getCount();
+        String namePrefix = productFetchDto.getNamePrefix();
+
+        // 校验参数
+        if (StrUtil.isBlank(searchText)) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
+        if (StrUtil.isBlank(namePrefix)) {
+            namePrefix = searchText;
+        }
+        if (count == null || count <= 0) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
+        ThrowUtils.throwIf(count > 30, ErrorCode.PARAMS_ERROR, "最多批量新增30个商品");
+
+        // 获取登录用户ID
+        Long loginUserId = userService.getLoginUser(request).getId();
+        // 图片上传路径
+        String uploadImagePrefix = String.format("%s/%s", productImagePrefix, loginUserId);
+
+        // 抓取商品图片
+        String fetchUrl = String.format("https://cn.bing.com/images/async?q=%s&mmasync=1", searchText);
+        Document document;
+        try {
+            document = Jsoup.connect(fetchUrl).get();
+        } catch (IOException e) {
+            log.error("获取页面失败", e);
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "获取页面失败");
+        }
+
+        // 商品列表
+        List<Product> productList = new ArrayList<>();
+        // 解析内容
+        Element div = document.getElementsByClass("dgControl").first();
+        if (ObjectUtil.isNull(div)) {
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "获取元素失败");
+        }
+        Elements imgElementList = div.select("img.mimg");
+        int uploadCount = 0;
+        for (Element element : imgElementList) {
+            String fileUrl = element.attr("src");
+            // 如果链接为空，直接跳过
+            if (StrUtil.isBlank(fileUrl)) {
+                log.info("当前链接为空，已跳过：{}", fileUrl);
+                continue;
+            }
+            // 处理图片地址
+            int questionMarkIndex = fileUrl.indexOf("?");
+            if (questionMarkIndex > -1) {
+                fileUrl = fileUrl.substring(0, questionMarkIndex);
+            }
+            // 上传图片
+            String imageUrl = urlPictureUpload.uploadPicture(fileUrl, uploadImagePrefix);
+            // 创建商品信息
+            Product product = new Product();
+            product.setImage(imageUrl);
+            product.setName(namePrefix + (++uploadCount));
+            product.setStatus(ProductStatusEnum.ON_SALE.getCode());
+            product.setStock(20);
+            product.setPrice(3000);
+            productList.add(product);
+            if (uploadCount >= count) {
+                break;
+            }
+        }
+
+        // 批量插入
+        ProductService proxyService = (ProductService) AopContext.currentProxy();
+        boolean saved = proxyService.saveBatch(productList);
+        if (!saved) {
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "数据库操作失败");
+        }
     }
 }
 

@@ -4,15 +4,13 @@ import com.lzh.recommend.annotation.LoginCheck;
 import com.lzh.recommend.annotation.MustAdmin;
 import com.lzh.recommend.enums.ErrorCode;
 import com.lzh.recommend.exception.BusinessException;
-import com.lzh.recommend.model.dto.PageProductDto;
-import com.lzh.recommend.model.dto.ProductAddDto;
-import com.lzh.recommend.model.dto.ProductUpdateDto;
-import com.lzh.recommend.model.dto.SearchProductDto;
+import com.lzh.recommend.model.dto.*;
 import com.lzh.recommend.model.entity.Product;
 import com.lzh.recommend.model.vo.ProductVo;
 import com.lzh.recommend.service.ProductService;
 import com.lzh.recommend.utils.PageBean;
 import com.lzh.recommend.utils.Result;
+import com.lzh.recommend.utils.ThrowUtils;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -141,6 +139,14 @@ public class ProductController {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
         productService.purchaseProduct(productId, request);
+        return Result.success(true);
+    }
+
+    @PostMapping("/add/batch")
+    @MustAdmin
+    public Result<Boolean> addProductByBatch(@RequestBody ProductFetchDto productFetchDto, HttpServletRequest request) {
+        ThrowUtils.throwIf(productFetchDto == null, ErrorCode.PARAMS_ERROR);
+        productService.addProductByBatch(productFetchDto, request);
         return Result.success(true);
     }
 }

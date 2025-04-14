@@ -38,7 +38,7 @@ public interface PictureConsts {
     /**
      * 图片文件允许的后缀
      */
-    List<String> ALLOW_SUFFIX_LIST = Arrays.asList("jpeg", "png", "jpg", "webp");
+    List<String> ALLOW_SUFFIX_LIST = Arrays.asList("png", "jpg", "jpeg", "webp");
 
     /**
      * 图片文件允许的 Content-Type

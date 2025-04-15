@@ -12,13 +12,13 @@ import org.apache.ibatis.annotations.Select;
 public interface RecordMapper extends BaseMapper<Record> {
 
     /**
-     * 根据用户ID计算用户打分商品的总分
+     * 根据用户ID计算用户打分商品的平均分
      *
      * @param userId 用户ID
-     * @return 总分
+     * @return 平均分 保留小数点后两位
      */
-    @Select("select sum(score) from `product-recommend`.record where user_id = #{userId}")
-    double sumScore(Long userId);
+    @Select("select round(avg(score),2) from `product-recommend`.record where user_id = #{userId}")
+    Double avgScore(Long userId);
 }
 
 

@@ -2,8 +2,11 @@ package com.lzh.recommend.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.lang.TypeReference;
 import cn.hutool.core.util.ObjectUtil;
+import cn.hutool.core.util.RandomUtil;
 import cn.hutool.core.util.StrUtil;
+import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -39,9 +42,12 @@ import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 import org.springframework.aop.framework.AopContext;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.CollectionUtils;
+import org.springframework.util.DigestUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.servlet.http.HttpServletRequest;
@@ -49,6 +55,8 @@ import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
@@ -69,6 +77,8 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product>
     private final FilePictureUpload filePictureUpload;
     private final UrlPictureUpload urlPictureUpload;
     private final SaleRecordService saleRecordService;
+    private final StringRedisTemplate stringRedisTemplate;
+    private final ExecutorService executorService;
 
     @Value("${product.recommend.path.product-image-prefix}")
     private String productImagePrefix;
@@ -212,45 +222,75 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product>
 
     @Override
     public PageBean<ProductVo> searchProducts(SearchProductDto searchProductDto, HttpServletRequest request) {
-        //获取请求参数
+        // 查询条件转JSON，然后再MD5加密
+        String questionStr = JSONUtil.toJsonStr(searchProductDto);
+        String hashKey = DigestUtils.md5DigestAsHex(questionStr.getBytes());
+        // 构建缓存Key
+        String cacheKey = String.format("product-recommend:searchProducts:%s", hashKey);
+
+        // 查 Redis 缓存，如果存在则返回
+        ValueOperations<String, String> opsForValue = stringRedisTemplate.opsForValue();
+        String cacheValues = opsForValue.get(cacheKey);
+        if (StrUtil.isNotBlank(cacheValues)) {
+            // 将字符串转为对象
+            PageBean<ProductVo> cacheResult = JSONUtil.toBean(
+                    cacheValues,
+                    new TypeReference<PageBean<ProductVo>>() {
+                    },
+                    true
+            );
+            // 存储用户搜索记录
+            List<ProductVo> productVos = cacheResult.getRecords();
+            // 异步改记录
+            executorService.submit(() -> recordService.addRecords(productVos, request));
+            return cacheResult;
+        }
+
+        // 获取请求参数
         Integer current = searchProductDto.getCurrent();
         Integer pageSize = searchProductDto.getPageSize();
         String name = searchProductDto.getName();
-        //校验参数
+        // 校验参数
         if (current == null || pageSize == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, CommonConsts.PAGE_PARAMS_ERROR);
         }
         if (current <= 0 || pageSize < 0) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, CommonConsts.PAGE_PARAMS_ERROR);
         }
-        //添加分页条件
+        // 添加分页条件
         Page<Product> page = new Page<>(current, pageSize);
-        //添加查询条件
+        // 添加查询条件
         LambdaQueryWrapper<Product> wrapper = new LambdaQueryWrapper<>();
         wrapper.like(StrUtil.isNotBlank(name), Product::getName, name);
         wrapper.eq(Product::getStatus, ProductStatusEnum.ON_SALE.getCode());
-        //查询
+        // 查询
         this.page(page, wrapper);
-        //搜索结果脱敏
+
         long total = page.getTotal();
         List<Product> records = page.getRecords();
-        List<ProductVo> productVos;
-        //如果为空直接返回
+        // 如果为空直接返回
         if (CollectionUtils.isEmpty(records)) {
-            return PageBean.of(total, Collections.emptyList());
+            // 缓存空数据
+            PageBean<ProductVo> pageBean = PageBean.of(total, Collections.emptyList());
+            setCache(opsForValue, pageBean, cacheKey);
+            return pageBean;
         }
-        //重新封装
-        productVos = records.stream()
+
+        // 搜索结果脱敏
+        List<ProductVo> productVos = records.stream()
                 .map(product -> BeanUtil.copyProperties(product, ProductVo.class))
                 .collect(Collectors.toList());
-        //如果用户输入的商品名称为空直接返回
+
+        // 如果用户输入的商品名称为空直接返回
+        PageBean<ProductVo> searchResult = PageBean.of(total, productVos);
+        setCache(opsForValue, searchResult, cacheKey);
         if (StrUtil.isBlank(name)) {
-            return PageBean.of(total, productVos);
+            return searchResult;
         }
-        //存储用户搜索记录
-        recordService.addRecords(productVos, request);
-        //返回结果
-        return PageBean.of(total, productVos);
+        // 异步存储用户搜索记录
+        executorService.submit(() -> recordService.addRecords(productVos, request));
+        // 返回结果
+        return searchResult;
     }
 
     @Override
@@ -434,6 +474,10 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product>
         }
         // 移除登录用户已打分的商品
         commonProductSet.removeAll(loginUserProductIdSet);
+        // 再次判空
+        if (CollUtil.isEmpty(commonProductSet)) {
+            return recommendHotProducts(count);
+        }
 
         // 利用基于评分差值进行加权的方法对登录用户未打分的商品进行分数预测
         // 计算登录用户的商品基础分，即商品平均分
@@ -589,6 +633,8 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product>
         String searchText = productFetchDto.getSearchText();
         Integer count = productFetchDto.getCount();
         String namePrefix = productFetchDto.getNamePrefix();
+        Integer priceUp = productFetchDto.getPriceUp();
+        Integer priceDown = productFetchDto.getPriceDown();
 
         // 校验参数
         if (StrUtil.isBlank(searchText)) {
@@ -601,6 +647,8 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product>
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
         ThrowUtils.throwIf(count > 30, ErrorCode.PARAMS_ERROR, "最多批量新增30个商品");
+        // 校验价格
+        checkParams(priceUp, priceDown);
 
         // 获取登录用户ID
         Long loginUserId = userService.getLoginUser(request).getId();
@@ -645,8 +693,12 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product>
             product.setImage(imageUrl);
             product.setName(namePrefix + (++uploadCount));
             product.setStatus(ProductStatusEnum.ON_SALE.getCode());
-            product.setStock(20);
-            product.setPrice(3000);
+            product.setStock(RandomUtil.randomInt(0, 100));
+            if (priceUp != null) {
+                product.setPrice(RandomUtil.randomInt(priceDown, priceUp));
+            } else {
+                product.setPrice(RandomUtil.randomInt(10, 3000));
+            }
             productList.add(product);
             if (uploadCount >= count) {
                 break;
@@ -658,6 +710,51 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product>
         boolean saved = proxyService.saveBatch(productList);
         if (!saved) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "数据库操作失败");
+        }
+    }
+
+    /**
+     * 缓存商品搜索结果
+     *
+     * @param operations redis String 操作类
+     * @param pageBean   商品搜索结果
+     * @param cacheKey   缓存键名
+     */
+    private void setCache(ValueOperations<String, String> operations, PageBean<?> pageBean, String cacheKey) {
+        // 将对象转为 JSON 字符串
+        String jsonStr = JSONUtil.toJsonStr(pageBean);
+        // 设置缓存，并设置过期时间随机
+        int cacheTime = 300 + RandomUtil.randomInt(0, 300);
+        try {
+            operations.set(cacheKey, jsonStr, cacheTime, TimeUnit.SECONDS);
+        } catch (Exception e) {
+            log.error("缓存设置失败", e);
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "缓存设置失败");
+        }
+    }
+
+    /**
+     * 校验参数
+     *
+     * @param priceUp   价格上限
+     * @param priceDown 价格下限
+     */
+    private void checkParams(Integer priceUp, Integer priceDown) {
+        // 两个参数都为null（允许通过）
+        if (priceUp == null && priceDown == null) {
+            return;
+        }
+        // 其中一个为null（不合法）
+        if (priceUp == null || priceDown == null) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
+        // 检查价格是否为负数
+        if (priceUp <= 0 || priceDown <= 0) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
+        // 检查价格下限是否大于上限
+        if (priceDown > priceUp) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
     }
 }

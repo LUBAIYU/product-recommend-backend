@@ -27,5 +27,15 @@ public class ProductFetchDto implements Serializable {
      */
     private String namePrefix;
 
+    /**
+     * 价格上限
+     */
+    private Integer priceUp;
+
+    /**
+     * 价格下限
+     */
+    private Integer priceDown;
+
     private static final long serialVersionUID = 1L;
 }

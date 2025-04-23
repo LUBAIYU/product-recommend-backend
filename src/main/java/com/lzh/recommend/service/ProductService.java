@@ -101,33 +101,34 @@ public interface ProductService extends IService<Product> {
     /**
      * 协同过滤算法
      *
-     * @param loginUserId 登录用户ID
-     * @param count       推荐商品数量
+     * @param loginUserId         登录用户ID
+     * @param count               推荐商品数量
+     * @param userIdProductIdsMap 用户ID和商品ID集合映射
+     * @param request             请求对象
      * @return 商品列表
      */
-    List<ProductVo> collaborativeFiltering(Long loginUserId, Integer count);
+    List<ProductVo> collaborativeFiltering(Long loginUserId, Integer count, Map<Long, Set<Long>> userIdProductIdsMap, HttpServletRequest request);
 
     /**
-     * 计算相似度，获取相似度集合
+     * 计算相似度，获取行为相似度集合
      *
      * @param loginUserId           登录用户ID
      * @param userIdProductIdsMap   用户Id商品ID集合
      * @param loginUserProductIdSet 登录用户商品ID集合
-     * @param similarityMap         相似度集合
+     * @return 行为相似度集合
      */
-    void getSimilarityMap(Long loginUserId, Map<Long, Set<Long>> userIdProductIdsMap, Set<Long> loginUserProductIdSet, Map<Long, Double> similarityMap);
+    Map<Long, Double> getSimilarityMapByBehaviorRecord(Long loginUserId, Map<Long, Set<Long>> userIdProductIdsMap, Set<Long> loginUserProductIdSet);
 
     /**
      * 计算最终评分
      *
-     * @param commonProductSet    共同商品集合
-     * @param similarityMap       相似度集合
-     * @param userIdProductIdsMap 用户Id商品ID集合
-     * @param loginUserAvgScore   登录用户平均评分
-     * @param finalScoreMap       最终评分集合
-     * @param similaritySum       相似度之和
+     * @param commonProductSet 共同商品集合
+     * @param similarityMap    相似度集合
+     * @param loginUserId      登录用户ID
+     * @param similaritySum    相似度之和
+     * @return 最终评分集合
      */
-    void getFinalScoreMap(Set<Long> commonProductSet, Map<Long, Double> similarityMap, Map<Long, Set<Long>> userIdProductIdsMap, double loginUserAvgScore, Map<Long, Double> finalScoreMap, double similaritySum);
+    Map<Long, Double> getFinalScoreMap(Set<Long> commonProductSet, Map<Long, Double> similarityMap, Long loginUserId, double similaritySum);
 
     /**
      * 上传图片

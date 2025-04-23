@@ -23,4 +23,24 @@ public interface UserConsts {
     Integer AGE_MAX = 100;
     Integer PHONE_REQUIRED_LENGTH = 11;
     String PHONE_PARAM_ERROR = "手机号长度需为11位！";
+
+    /**
+     * 默认性别
+     */
+    int DEFAULT_GENDER = 1;
+
+    /**
+     * 默认年龄
+     */
+    int DEFAULT_AGE = 25;
+
+    /**
+     * 年龄加权权重
+     */
+    double AGE_WEIGHT = 0.5;
+
+    /**
+     * 性别加权权重
+     */
+    double GENDER_WEIGHT = 0.5;
 }

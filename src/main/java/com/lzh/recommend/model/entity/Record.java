@@ -3,7 +3,6 @@ package com.lzh.recommend.model.entity;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
-import com.baomidou.mybatisplus.annotation.TableLogic;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
@@ -48,12 +47,6 @@ public class Record implements Serializable {
      * 更新时间
      */
     private Date updateTime;
-
-    /**
-     * 是否删除（0-存在，1-删除）
-     */
-    @TableLogic
-    private Integer isDeleted;
 
     @TableField(exist = false)
     private static final long serialVersionUID = 1L;

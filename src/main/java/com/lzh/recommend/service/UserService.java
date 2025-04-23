@@ -11,6 +11,7 @@ import com.lzh.recommend.utils.PageBean;
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.servlet.http.HttpServletRequest;
+import java.util.Map;
 
 /**
  * @author by
@@ -80,4 +81,26 @@ public interface UserService extends IService<User> {
      * @return 用户信息
      */
     UserVo getUserById(Long id);
+
+    /**
+     * 根据用户属性计算用户相似度
+     *
+     * @param request 请求对象
+     * @return 相似度集合
+     */
+    Map<Long, Double> getSimilarityMapByUserProperty(HttpServletRequest request);
+
+    /**
+     * 计算属性相似度
+     *
+     * @param loginUserAge    登录用户年龄
+     * @param loginUserGender 登录用户性别
+     * @param otherUserAge    其他用户年龄
+     * @param otherUserGender 其他用户性别
+     * @return 相似度
+     */
+    double calculateAttributeSimilarity(
+            int loginUserAge, int loginUserGender,
+            int otherUserAge, int otherUserGender
+    );
 }

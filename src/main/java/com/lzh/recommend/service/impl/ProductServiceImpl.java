@@ -8,7 +8,6 @@ import cn.hutool.core.util.RandomUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.lzh.recommend.constant.CommonConsts;
@@ -60,6 +59,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * @author by
@@ -239,10 +239,13 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product>
                     },
                     true
             );
-            // 存储用户搜索记录
-            List<ProductVo> productVos = cacheResult.getRecords();
-            // 异步改记录
-            executorService.submit(() -> recordService.addRecords(productVos, request));
+            // 用户自行输入搜索才保存记录
+            if (StrUtil.isNotBlank(searchProductDto.getName())) {
+                // 存储用户搜索记录
+                List<ProductVo> productVos = cacheResult.getRecords();
+                // 异步改记录
+                executorService.submit(() -> recordService.addRecords(productVos, request));
+            }
             return cacheResult;
         }
 
@@ -312,13 +315,21 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product>
                 .eq(Record::getUserId, loginUserId)
                 .count();
 
-        //如果登录用户不存在记录或者只有当前用户的记录，则推荐热门商品
+        // 根据用户ID进行分组，每组的值是一个商品ID集合（覆盖索引优化）
+        List<Record> recordList = recordService.lambdaQuery()
+                .select(Record::getUserId, Record::getProductId)
+                .list();
+        Map<Long, Set<Long>> userIdProductIdsMap = recordList.stream()
+                .collect(Collectors.groupingBy(Record::getUserId,
+                        Collectors.mapping(Record::getProductId, Collectors.toSet())));
+
+        //如果登录用户不存在记录或者只有当前用户的记录，则进行冷启动处理
         if (loginUserCount == 0 || loginUserCount == total) {
-            return recommendHotProducts(count);
+            return handleColdStart(count, userIdProductIdsMap, request);
         }
 
         //当登录用户和其他用户都存在记录时，则利用用户协同过滤算法进行推荐
-        return collaborativeFiltering(loginUserId, count);
+        return collaborativeFiltering(loginUserId, count, userIdProductIdsMap, request);
     }
 
     @Override
@@ -409,32 +420,17 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product>
     }
 
     @Override
-    public List<ProductVo> collaborativeFiltering(Long loginUserId, Integer count) {
-        // 根据用户ID进行分组，每组的值是一个商品ID集合（覆盖索引优化）
-        QueryWrapper<Record> queryWrapper = new QueryWrapper<>();
-        queryWrapper.select("user_id", "product_id");
-        List<Record> recordList = recordService.getBaseMapper().selectList(queryWrapper);
-        Map<Long, Set<Long>> userIdProductIdsMap = recordList.stream()
-                .collect(Collectors.groupingBy(Record::getUserId,
-                        Collectors.mapping(Record::getProductId, Collectors.toSet())));
-
+    public List<ProductVo> collaborativeFiltering(Long loginUserId,
+                                                  Integer count,
+                                                  Map<Long, Set<Long>> userIdProductIdsMap,
+                                                  HttpServletRequest request) {
         // 获取登录用户商品ID集合
         Set<Long> loginUserProductIdSet = userIdProductIdsMap.get(loginUserId);
-
-        // 用于保存用户相似度的Map
-        Map<Long, Double> similarityMap = new HashMap<>(((int) userService.count() - 1) << 1);
-        // 计算相似度，获取相似度集合
-        getSimilarityMap(loginUserId, userIdProductIdsMap, loginUserProductIdSet, similarityMap);
-
-        // 对相似度集合根据相似度进行倒序排序
-        similarityMap = similarityMap.entrySet()
-                .stream()
-                .sorted(Map.Entry.comparingByValue(Comparator.reverseOrder()))
-                .collect(Collectors.toMap(
-                        Map.Entry::getKey,
-                        Map.Entry::getValue,
-                        (oldValue, newValue) -> oldValue, LinkedHashMap::new)
-                );
+        // 获取排序后的融合相似度集合
+        Map<Long, Double> similarityMap = getSortedFusionSimilarityMap(loginUserId,
+                userIdProductIdsMap,
+                loginUserProductIdSet,
+                request);
 
         // 如果相似度最高的用户的相似度为0，则推荐热门商品
         if (!similarityMap.isEmpty() && similarityMap.values().iterator().next() == 0) {
@@ -443,31 +439,36 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product>
 
         // 取前n个最相似用户
         int num = 0;
-        // 用于保存相似用户列表的共同打分商品的集合
-        Set<Long> commonProductSet = null;
         // 用于保存前n个用户的相似度之和
         double similaritySum = 0;
+        // 统计商品被前 N 个相似用户覆盖的次数
+        Map<Long, Integer> coverCountMap = new HashMap<>(N << 1);
         for (Map.Entry<Long, Double> entry : similarityMap.entrySet()) {
-            Long userId = entry.getKey();
-            // 计算相似度之和
-            similaritySum += entry.getValue();
-            Set<Long> productIds = userIdProductIdsMap.get(userId);
-            // 初始化
-            if (commonProductSet == null) {
-                commonProductSet = new HashSet<>(productIds);
-            } else {
-                //求相似用户的商品交集
-                commonProductSet.retainAll(productIds);
-                // 如果交集已为空，无需继续
-                if (commonProductSet.isEmpty()) {
-                    break;
-                }
-            }
-            num++;
             if (num >= N) {
                 break;
             }
+            Long userId = entry.getKey();
+            Set<Long> productIds = userIdProductIdsMap.get(userId);
+            // 如果没有商品，则降级添加相似度
+            if (CollUtil.isEmpty(productIds)) {
+                similaritySum += entry.getValue() * 0.5;
+                continue;
+            }
+            // 保存商品的次数
+            productIds.forEach(productId -> {
+                coverCountMap.put(productId, coverCountMap.getOrDefault(productId, 0) + 1);
+            });
+            // 计算相似度之和
+            similaritySum += entry.getValue();
+            num++;
         }
+
+        // 筛选被至少0.2*N个用户覆盖的商品
+        Set<Long> commonProductSet = coverCountMap.entrySet().stream()
+                .filter(entry -> entry.getValue() >= 0.2 * N)
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toSet());
+
         // 如果集合为空，则推荐热门商品
         if (CollUtil.isEmpty(commonProductSet)) {
             return recommendHotProducts(count);
@@ -480,25 +481,9 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product>
         }
 
         // 利用基于评分差值进行加权的方法对登录用户未打分的商品进行分数预测
-        // 计算登录用户的商品基础分，即商品平均分
-        double loginUserAvgScore = recordMapper.avgScore(loginUserId);
-        // 计算未打分商品集合中每个商品的预测分数
-        Map<Long, Double> finalScoreMap = new HashMap<>(commonProductSet.size() << 1);
-
         // 计算最终预测分数
-        getFinalScoreMap(commonProductSet, similarityMap, userIdProductIdsMap,
-                loginUserAvgScore, finalScoreMap, similaritySum);
-
-        // 对最终地预测分数集合进行一次倒序排序
-        finalScoreMap = finalScoreMap.entrySet()
-                .stream()
-                .sorted(Map.Entry.comparingByValue(Comparator.reverseOrder()))
-                .collect(Collectors.toMap(
-                        Map.Entry::getKey,
-                        Map.Entry::getValue,
-                        (oldValue, newValue) -> oldValue,
-                        LinkedHashMap::new)
-                );
+        Map<Long, Double> finalScoreMap = getFinalScoreMap(commonProductSet, similarityMap,
+                loginUserId, similaritySum);
 
         // 取前count个商品，如果数量小于count，则取全部
         List<Product> productList = this.lambdaQuery()
@@ -515,10 +500,11 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product>
     }
 
     @Override
-    public void getSimilarityMap(Long loginUserId,
-                                 Map<Long, Set<Long>> userIdProductIdsMap,
-                                 Set<Long> loginUserProductIdSet,
-                                 Map<Long, Double> similarityMap) {
+    public Map<Long, Double> getSimilarityMapByBehaviorRecord(Long loginUserId,
+                                                              Map<Long, Set<Long>> userIdProductIdsMap,
+                                                              Set<Long> loginUserProductIdSet) {
+        // 保存行为相似度
+        Map<Long, Double> recordSimilarityMap = new HashMap<>((int) userService.count() - 1 << 1);
         // 计算其他用户与登录用户的相似度
         for (Map.Entry<Long, Set<Long>> entry : userIdProductIdsMap.entrySet()) {
             Long userId = entry.getKey();
@@ -526,33 +512,23 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product>
                 continue;
             }
             // 拿到其他用户的商品ID集合
-            Set<Long> productIdSet = entry.getValue();
-            // 计算交集大小
-            int intersectionSize = 0;
-            for (Long productId : productIdSet) {
-                if (loginUserProductIdSet.contains(productId)) {
-                    intersectionSize++;
-                }
-            }
-            // 计算并集大小 |A|+|B|-|A∩B|
-            int unionSize = loginUserProductIdSet.size() + productIdSet.size() - intersectionSize;
-            // 计算相似度
-            double similarity = unionSize == 0 ? 0.0 : (double) intersectionSize / unionSize;
-
-            // 使用 BigDecimal 保留两位小数（四舍五入）
-            BigDecimal bd = new BigDecimal(similarity)
-                    .setScale(2, RoundingMode.HALF_UP);
+            BigDecimal bd = getRecordSimilarity(loginUserProductIdSet, entry);
             //添加到相似度集合中
-            similarityMap.put(userId, bd.doubleValue());
+            recordSimilarityMap.put(userId, bd.doubleValue());
         }
+        return recordSimilarityMap;
     }
 
+
     @Override
-    public void getFinalScoreMap(Set<Long> commonProductSet,
-                                 Map<Long, Double> similarityMap,
-                                 Map<Long, Set<Long>> userIdProductIdsMap,
-                                 double loginUserAvgScore, Map<Long, Double> finalScoreMap,
-                                 double similaritySum) {
+    public Map<Long, Double> getFinalScoreMap(Set<Long> commonProductSet, Map<Long, Double> similarityMap,
+                                              Long loginUserId,
+                                              double similaritySum) {
+        // 计算登录用户的商品基础分，即商品平均分
+        double loginUserAvgScore = recordMapper.avgScore(loginUserId);
+        // 计算未打分商品集合中每个商品的预测分数
+        Map<Long, Double> finalScoreMap = new HashMap<>(commonProductSet.size() << 1);
+
         // 批量获取相似用户的商品平均分
         Map<Long, Double> userAvgScoreMap = new HashMap<>(similarityMap.keySet().size() << 1);
         for (Long userId : similarityMap.keySet()) {
@@ -599,6 +575,17 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product>
                     .setScale(2, RoundingMode.HALF_UP);
             finalScoreMap.put(productId, bd.doubleValue());
         }
+
+        // 对最终地预测分数集合进行一次倒序排序
+        return finalScoreMap.entrySet()
+                .stream()
+                .sorted(Map.Entry.comparingByValue(Comparator.reverseOrder()))
+                .collect(Collectors.toMap(
+                        Map.Entry::getKey,
+                        Map.Entry::getValue,
+                        (oldValue, newValue) -> oldValue,
+                        LinkedHashMap::new)
+                );
     }
 
     @Override
@@ -756,6 +743,196 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product>
         if (priceDown > priceUp) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
+    }
+
+    /**
+     * 获取融合相似度集合
+     *
+     * @param recordSimilarityMap       行为相似度集合
+     * @param userPropertySimilarityMap 用户属性相似度集合
+     * @param userIdProductIdsMap       用户ID与商品ID集合映射
+     * @return 融合相似度集合
+     */
+    private Map<Long, Double> getFusionSimilarityMap(Map<Long, Double> recordSimilarityMap,
+                                                     Map<Long, Double> userPropertySimilarityMap,
+                                                     Map<Long, Set<Long>> userIdProductIdsMap) {
+        // 获取所有用户ID
+        Set<Long> allUserIdSet = Stream.concat(
+                        recordSimilarityMap.keySet().stream(),
+                        userPropertySimilarityMap.keySet().stream()
+                )
+                .collect(Collectors.toSet());
+
+        // 保存每个用户的动态Alpha值
+        Map<Long, Double> dynamicAlphaMap = new HashMap<>(allUserIdSet.size() << 1);
+        // 计算动态Alpha值
+        allUserIdSet.forEach(userId -> {
+            // 获取行为记录数
+            int behaviorCount = userIdProductIdsMap.getOrDefault(userId, Collections.emptySet())
+                    .size();
+            double alpha = Math.min(
+                    ProductConsts.MAX_POWER,
+                    ProductConsts.BASIC + ProductConsts.GROWTH_RATE * behaviorCount
+            );
+            dynamicAlphaMap.put(userId, alpha);
+        });
+
+        // 计算融合相似度
+        return allUserIdSet.stream().collect(Collectors.toMap(
+                userId -> userId,
+                userId -> {
+                    // 获取行为相似度
+                    double recordSimilarity = recordSimilarityMap.getOrDefault(userId, 0.0);
+                    // 获取用户属性相似度
+                    double userPropertySimilarity = userPropertySimilarityMap.getOrDefault(userId, 0.0);
+                    // 获取动态Alpha值
+                    double alpha = dynamicAlphaMap.get(userId);
+                    // 计算融合相似度
+                    double mixSimilarity = alpha * recordSimilarity + (1 - alpha) * userPropertySimilarity;
+
+                    // 使用 BigDecimal 保留两位小数（四舍五入）
+                    return new BigDecimal(mixSimilarity)
+                            .setScale(2, RoundingMode.HALF_UP)
+                            .doubleValue();
+                }
+        ));
+    }
+
+    /**
+     * 使用余弦相似度计算行为记录相似度
+     *
+     * @param loginUserProductIdSet 登录用户商品ID集合
+     * @param entry                 Entry对象
+     * @return 相似度
+     */
+    private BigDecimal getRecordSimilarity(Set<Long> loginUserProductIdSet, Map.Entry<Long, Set<Long>> entry) {
+        Set<Long> productIdSet = entry.getValue();
+        int loginUserProductSize = loginUserProductIdSet.size();
+        int otherUserProductSize = productIdSet.size();
+
+        // 计算交集大小
+        int intersectionSize = CollUtil.intersection(loginUserProductIdSet,
+                productIdSet).size();
+
+        // 余弦相似度计算
+        if (loginUserProductSize == 0 || otherUserProductSize == 0) {
+            return BigDecimal.ZERO;
+        }
+        double denominator = Math.sqrt(loginUserProductSize) * Math.sqrt(otherUserProductSize);
+        // 计算相似度
+        double similarity = denominator == 0 ? 0.0 : (double) intersectionSize / denominator;
+
+        // 使用 BigDecimal 保留两位小数（四舍五入）
+        return new BigDecimal(similarity)
+                .setScale(2, RoundingMode.HALF_UP);
+    }
+
+    /**
+     * 处理冷启动
+     * 混合推荐方式：50% 热门商品推荐，30% 用户属性推荐，20% 随机商品推荐
+     *
+     * @param count               推荐条数
+     * @param request             请求对象
+     * @param userIdProductIdsMap 用户ID和商品ID集合映射
+     * @return 推荐商品列表
+     */
+    private List<ProductVo> handleColdStart(Integer count, Map<Long, Set<Long>> userIdProductIdsMap, HttpServletRequest request) {
+        // 获取用户属性相似度集合
+        Map<Long, Double> propertySimilarityMap = userService.getSimilarityMapByUserProperty(request);
+        // 如果集合为空，则进行热门商品推荐
+        if (CollUtil.isEmpty(propertySimilarityMap)) {
+            return recommendHotProducts(count);
+        }
+
+        // 对相似度集合进行排序并取前 N 个用户
+        List<Long> similarUserIdList = propertySimilarityMap.entrySet().stream()
+                .sorted(Map.Entry.comparingByValue(Comparator.reverseOrder()))
+                .limit(N)
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toList());
+        // 获取相似用户购买的商品
+        Set<Long> productIdSet = similarUserIdList.stream()
+                .flatMap(userId -> {
+                    if (userIdProductIdsMap.containsKey(userId)) {
+                        return userIdProductIdsMap.get(userId).stream();
+                    }
+                    return Stream.empty();
+                })
+                .collect(Collectors.toSet());
+        if (CollUtil.isEmpty(productIdSet)) {
+            return recommendHotProducts(count);
+        }
+
+        // 混合推荐 50% 热门 + 30% 相似用户偏好 + 20% 随机
+        // 50% 热门
+        List<ProductVo> hotProductList = recommendHotProducts((int) (0.5 * count));
+
+        // 30% 相似用户偏好
+        List<ProductVo> similarUserProductList = this.lambdaQuery()
+                .in(Product::getId, productIdSet)
+                .list()
+                .stream()
+                .map(product -> BeanUtil.copyProperties(product, ProductVo.class))
+                .limit((long) (0.3 * count))
+                .collect(Collectors.toList());
+
+        // 20% 随机
+        List<ProductVo> randomProductList = randomProducts((int) (0.2 * count));
+
+        // 合并推荐结果
+        Set<ProductVo> productVoSet = Stream.concat(Stream.concat(hotProductList.stream(), similarUserProductList.stream()),
+                        randomProductList.stream())
+                .collect(Collectors.toSet());
+        List<ProductVo> productVoList;
+        // 避免出现重复商品
+        while (true) {
+            if (productVoSet.size() >= count) {
+                productVoList = new ArrayList<>(productVoSet);
+                break;
+            }
+            // 再随机取出一些商品进行合并，直到达到 count 条数据
+            randomProductList = randomProducts(count - productVoSet.size());
+            productVoSet.addAll(randomProductList);
+        }
+        return productVoList;
+    }
+
+    /**
+     * 获取排序后的融合相似度集合
+     *
+     * @param loginUserId           登录用户ID
+     * @param userIdProductIdsMap   用户ID和商品ID集合映射
+     * @param loginUserProductIdSet 登录用户商品ID集合
+     * @param request               请求对象
+     * @return 排序后的融合相似度集合
+     */
+    private Map<Long, Double> getSortedFusionSimilarityMap(Long loginUserId,
+                                                           Map<Long, Set<Long>> userIdProductIdsMap,
+                                                           Set<Long> loginUserProductIdSet,
+                                                           HttpServletRequest request) {
+        // 获取行为相似度集合
+        Map<Long, Double> recordSimilarityMap = getSimilarityMapByBehaviorRecord(
+                loginUserId, userIdProductIdsMap, loginUserProductIdSet
+        );
+        // 获取用户属性相似度集合
+        Map<Long, Double> userPropertySimilarityMap = userService.getSimilarityMapByUserProperty(request);
+        // 获取融合相似度集合
+        Map<Long, Double> similarityMap = recordSimilarityMap;
+        if (CollUtil.isNotEmpty(userPropertySimilarityMap)) {
+            similarityMap = getFusionSimilarityMap(
+                    recordSimilarityMap, userPropertySimilarityMap, userIdProductIdsMap
+            );
+        }
+
+        // 对相似度集合根据相似度进行倒序排序
+        return similarityMap.entrySet()
+                .stream()
+                .sorted(Map.Entry.comparingByValue(Comparator.reverseOrder()))
+                .collect(Collectors.toMap(
+                        Map.Entry::getKey,
+                        Map.Entry::getValue,
+                        (oldValue, newValue) -> oldValue, LinkedHashMap::new)
+                );
     }
 }
 

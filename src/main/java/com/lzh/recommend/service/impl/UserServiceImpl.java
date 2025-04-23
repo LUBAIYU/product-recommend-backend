@@ -1,15 +1,18 @@
 package com.lzh.recommend.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
+import cn.hutool.core.util.ObjectUtil;
 import cn.hutool.core.util.RandomUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.crypto.digest.DigestUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.lzh.recommend.constant.CommonConsts;
 import com.lzh.recommend.constant.UserConsts;
+import com.lzh.recommend.enums.AgeGroupEnum;
 import com.lzh.recommend.enums.ErrorCode;
 import com.lzh.recommend.enums.RoleEnum;
 import com.lzh.recommend.exception.BusinessException;
@@ -31,6 +34,10 @@ import org.springframework.web.multipart.MultipartFile;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * @author by
@@ -121,6 +128,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         user.setUserPassword(encryptPassword);
         user.setRole(RoleEnum.USER.getCode());
         user.setSalt(salt);
+        user.setGender(UserConsts.DEFAULT_GENDER);
+        user.setAge(UserConsts.DEFAULT_AGE);
         this.save(user);
     }
 
@@ -257,6 +266,75 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         UserVo userVo = new UserVo();
         BeanUtil.copyProperties(user, userVo);
         return userVo;
+    }
+
+    @Override
+    public Map<Long, Double> getSimilarityMapByUserProperty(HttpServletRequest request) {
+        // 获取当前登录用户ID、性别、年龄
+        UserVo loginUser = this.getLoginUser(request);
+        if (!hasValidAttributes(loginUser)) {
+            return Collections.emptyMap();
+        }
+
+        // 判断注册用户是否只有登录用户
+        List<User> userList = getUserListWithDefaults();
+        if (userList.size() <= 1) {
+            return Collections.emptyMap();
+        }
+
+        // 用于保存相似度集合
+        Map<Long, Double> similarityMap = new HashMap<>((userList.size() - 1) << 1);
+        // 计算相似度
+        for (User user : userList) {
+            if (user.getId().equals(loginUser.getId())) {
+                continue;
+            }
+            double similarity = calculateAttributeSimilarity(
+                    loginUser.getAge(), loginUser.getGender(),
+                    user.getAge(), user.getGender()
+            );
+            similarityMap.put(user.getId(), similarity);
+        }
+        return similarityMap;
+    }
+
+    @Override
+    public double calculateAttributeSimilarity(int loginUserAge, int loginUserGender, int otherUserAge, int otherUserGender) {
+        // 计算年龄相似度
+        double ageSimilarity = AgeGroupEnum.isSameGroup(loginUserAge, otherUserAge) ? 1 : 0;
+        // 计算性别相似度
+        double genderSimilarity = otherUserGender == loginUserGender ? 1 : 0;
+        // 获取最终相似度
+        return UserConsts.AGE_WEIGHT * ageSimilarity + UserConsts.GENDER_WEIGHT * genderSimilarity;
+    }
+
+    /**
+     * @return 获取带有默认值的用户列表
+     */
+    private List<User> getUserListWithDefaults() {
+        QueryWrapper<User> queryWrapper = new QueryWrapper<>();
+        queryWrapper.select("id", "gender", "age");
+        List<User> userList = this.list(queryWrapper);
+        // 统一补全默认值
+        for (User user : userList) {
+            if (ObjectUtil.isNull(user.getAge())) {
+                user.setAge(UserConsts.DEFAULT_AGE);
+            }
+            if (ObjectUtil.isNull(user.getGender())) {
+                user.setGender(UserConsts.DEFAULT_GENDER);
+            }
+        }
+        return userList;
+    }
+
+    /**
+     * 校验属性
+     *
+     * @param user 登录用户
+     * @return 是否通过
+     */
+    private boolean hasValidAttributes(UserVo user) {
+        return ObjectUtil.isNotNull(user.getGender()) && ObjectUtil.isNotNull(user.getAge());
     }
 }
 

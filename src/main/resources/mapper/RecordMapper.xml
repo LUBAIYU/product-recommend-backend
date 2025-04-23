@@ -11,12 +11,10 @@
         <result property="score" column="score" jdbcType="INTEGER"/>
         <result property="createTime" column="create_time" jdbcType="TIMESTAMP"/>
         <result property="updateTime" column="update_time" jdbcType="TIMESTAMP"/>
-        <result property="isDeleted" column="is_deleted" jdbcType="TINYINT"/>
     </resultMap>
 
     <sql id="Base_Column_List">
         id,user_id,product_id,
         score,create_time,update_time,
-        is_deleted
     </sql>
 </mapper>

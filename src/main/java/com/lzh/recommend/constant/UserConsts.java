@@ -37,10 +37,10 @@ public interface UserConsts {
     /**
      * 年龄加权权重
      */
-    double AGE_WEIGHT = 0.5;
+    double AGE_WEIGHT = 0.3;
 
     /**
      * 性别加权权重
      */
-    double GENDER_WEIGHT = 0.5;
+    double GENDER_WEIGHT = 0.7;
 }

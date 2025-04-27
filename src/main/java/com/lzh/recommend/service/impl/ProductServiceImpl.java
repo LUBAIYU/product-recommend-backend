@@ -557,6 +557,13 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product>
             for (Map.Entry<Long, Double> entry : similarityMap.entrySet()) {
                 Long userId = entry.getKey();
                 Double similarity = entry.getValue();
+                // 判空操作
+                if (!userIdProductIdScoreMap.containsKey(userId)) {
+                    continue;
+                }
+                if (!userIdProductIdScoreMap.get(userId).containsKey(productId)) {
+                    continue;
+                }
                 // 获取相似用户打分商品的平均分
                 double avgScore = userAvgScoreMap.get(userId);
                 // 获取相似用户对待预测商品的分数
@@ -859,30 +866,42 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product>
                     return Stream.empty();
                 })
                 .collect(Collectors.toSet());
-        if (CollUtil.isEmpty(productIdSet)) {
-            return recommendHotProducts(count);
-        }
 
-        // 混合推荐 50% 热门 + 30% 相似用户偏好 + 20% 随机
         // 50% 热门
         List<ProductVo> hotProductList = recommendHotProducts((int) (0.5 * count));
 
-        // 30% 相似用户偏好
-        List<ProductVo> similarUserProductList = this.lambdaQuery()
-                .in(Product::getId, productIdSet)
-                .list()
-                .stream()
-                .map(product -> BeanUtil.copyProperties(product, ProductVo.class))
-                .limit((long) (0.3 * count))
-                .collect(Collectors.toList());
+        List<ProductVo> similarUserProductList;
+        List<ProductVo> randomProductList;
+        Set<ProductVo> productVoSet;
 
-        // 20% 随机
-        List<ProductVo> randomProductList = randomProducts((int) (0.2 * count));
+        // 50% 热门 + 30% 相似用户偏好 + 20% 随机
+        if (CollUtil.isNotEmpty(productIdSet)) {
+            // 30% 相似用户偏好
+            similarUserProductList = this.lambdaQuery()
+                    .in(Product::getId, productIdSet)
+                    .list()
+                    .stream()
+                    .map(product -> BeanUtil.copyProperties(product, ProductVo.class))
+                    .limit((long) (0.3 * count))
+                    .collect(Collectors.toList());
 
-        // 合并推荐结果
-        Set<ProductVo> productVoSet = Stream.concat(Stream.concat(hotProductList.stream(), similarUserProductList.stream()),
-                        randomProductList.stream())
-                .collect(Collectors.toSet());
+            // 20% 随机
+            randomProductList = randomProducts((int) (0.2 * count));
+
+            // 合并推荐结果
+            productVoSet = Stream.concat(Stream.concat(hotProductList.stream(), similarUserProductList.stream()),
+                            randomProductList.stream())
+                    .collect(Collectors.toSet());
+        } else {
+            // 50% 热门 + 50% 随机
+            randomProductList = randomProducts((int) (0.5 * count));
+
+            // 合并推荐结果
+            productVoSet = Stream.concat(hotProductList.stream(),
+                            randomProductList.stream())
+                    .collect(Collectors.toSet());
+        }
+
         List<ProductVo> productVoList;
         // 避免出现重复商品
         while (true) {

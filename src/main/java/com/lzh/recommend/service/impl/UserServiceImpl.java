@@ -12,7 +12,6 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.lzh.recommend.constant.CommonConsts;
 import com.lzh.recommend.constant.UserConsts;
-import com.lzh.recommend.enums.AgeGroupEnum;
 import com.lzh.recommend.enums.ErrorCode;
 import com.lzh.recommend.enums.RoleEnum;
 import com.lzh.recommend.exception.BusinessException;
@@ -34,6 +33,8 @@ import org.springframework.web.multipart.MultipartFile;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -300,8 +301,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
 
     @Override
     public double calculateAttributeSimilarity(int loginUserAge, int loginUserGender, int otherUserAge, int otherUserGender) {
-        // 计算年龄相似度
-        double ageSimilarity = AgeGroupEnum.isSameGroup(loginUserAge, otherUserAge) ? 1 : 0;
+        // 通过欧几里得距离计算年龄相似度
+        double ageSimilarity = calculateAgeSimilarity(loginUserAge, otherUserAge);
         // 计算性别相似度
         double genderSimilarity = otherUserGender == loginUserGender ? 1 : 0;
         // 获取最终相似度
@@ -335,6 +336,24 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
      */
     private boolean hasValidAttributes(UserVo user) {
         return ObjectUtil.isNotNull(user.getGender()) && ObjectUtil.isNotNull(user.getAge());
+    }
+
+    /**
+     * 使用欧式距离转换相似度
+     *
+     * @param loginUserAge 登录用户年龄
+     * @param otherUserAge 其他用户年龄
+     * @return 相似度
+     */
+    private double calculateAgeSimilarity(int loginUserAge, int otherUserAge) {
+        // 计算两个用户之间的距离
+        double distance = Math.abs(loginUserAge - otherUserAge);
+        // 转换为相似度
+        double similarity = 1.0 / (1.0 + distance);
+        // 保留两位小数
+        return new BigDecimal(similarity)
+                .setScale(2, RoundingMode.HALF_UP)
+                .doubleValue();
     }
 }
 
